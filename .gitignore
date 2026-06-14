@@ -9,10 +9,28 @@ dist-ssr/
 
 # OS/IDEs
 .DS_Store
+Thumbs.db
 .vscode/
 .idea/
 
-# Temp files
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Claude Code local settings
+.claude/
+
+# Temp/test output files
 *.log
 **/.git_backup/
+csm_test.txt
+csm_test2.txt
+test_out.txt
+torch_test.txt
+*_test_output.wav
+
+# Unused default template assets
+zain-companion/src/assets/hero.png
+zain-companion/src/assets/vite.svg
 
