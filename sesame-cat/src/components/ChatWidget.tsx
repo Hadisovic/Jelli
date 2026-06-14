@@ -3,14 +3,15 @@ import { invoke } from '@tauri-apps/api/core'
 import { motion, AnimatePresence } from 'motion/react'
 import { useConfigStore } from '@/stores/config'
 import { useChatStore } from '@/stores/chat'
-import { stopGeneration } from '@/lib/api'
+import { stopGeneration, setWindowGeometry } from '@/lib/api'
 import { SettingsPanel } from './SettingsPanel'
 import { MessageList } from './MessageList'
 import { ChatInput } from './ChatInput'
 
 /**
- * ChatWidget — fills the expanded Tauri window.
- * When collapsed it renders nothing (the blob circle is shown instead).
+ * ChatWidget — expanded view showing chat history and full input.
+ * Toggled via Ctrl+Space keyboard shortcut or programmatically.
+ * Different from ChatTextbox which is the quick-input floating textbox.
  */
 export function ChatWidget() {
   const expanded = useConfigStore((s) => s.expanded)
@@ -25,6 +26,11 @@ export function ChatWidget() {
     e.preventDefault()
     invoke('start_dragging').catch(() => {})
   }, [])
+
+  const handleClose = useCallback(() => {
+    setExpanded(false)
+    setWindowGeometry(0, 0, 140, 140).catch(() => {})
+  }, [setExpanded])
 
   return (
     <AnimatePresence>
@@ -75,9 +81,9 @@ export function ChatWidget() {
               <button
                 type="button"
                 className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-white/10 text-white/40 hover:text-white/70 transition-colors"
-                onClick={() => setExpanded(false)}
+                onClick={handleClose}
                 onMouseDown={(e) => e.stopPropagation()}
-                title="Close"
+                title="Close (Ctrl+Space)"
               >
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                   <path d="M1 1L13 13M13 1L1 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />

@@ -98,6 +98,12 @@ export async function sendTts(requestId: string, text: string, speakerId: number
   await invoke('send_tts', { requestId, text, speakerId, quantization })
 }
 
+// ── Window Commands ────────────────────────────────────────────────────────
+
+export async function setWindowGeometry(x: number, y: number, width: number, height: number): Promise<void> {
+  await invoke('set_window_geometry', { x, y, width, height })
+}
+
 // ── Event Listeners ─────────────────────────────────────────────────────────
 
 export function onLlmToken(handler: EventHandler<LlmTokenPayload>): Promise<UnlistenFn> {

@@ -1,7 +1,10 @@
 import { useEffect, useRef, useCallback } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import { useConfigStore } from '@/stores/config'
 import { useChatStore } from '@/stores/chat'
 import { BLOB } from '@/lib/constants'
+
+const DRAG_THRESHOLD = 5 // px — distinguish click from drag
 
 function blobNoise(angle: number, time: number, amplitude: number): number {
   const n1 = Math.sin(angle * 2 + time * 0.8) * amplitude
@@ -12,10 +15,16 @@ function blobNoise(angle: number, time: number, amplitude: number): number {
 
 export function BlobCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const setExpanded = useConfigStore((s) => s.setExpanded)
-  const expanded = useConfigStore((s) => s.expanded)
+  const setTextboxOpen = useConfigStore((s) => s.setTextboxOpen)
+  const textboxOpen = useConfigStore((s) => s.textboxOpen)
+  const isDragging = useConfigStore((s) => s.isDragging)
+  const setIsDragging = useConfigStore((s) => s.setIsDragging)
   const isProcessing = useChatStore((s) => s.isProcessing)
 
+  const dragStartPos = useRef({ x: 0, y: 0 })
+  const hasMoved = useRef(false)
+
+  // Draw animation loop
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -24,10 +33,11 @@ export function BlobCanvas() {
 
     let raf: number
     const draw = (time: number) => {
+      // Clear canvas with transparency (not white/black)
       ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-      // State-based palette selection
-      const hue = isProcessing ? 270 : expanded ? 210 : (time / 1000 * BLOB.HUE_SPEED) % 360
+      // State-based palette: processing → blue, dragging → cyan, idle → purple
+      const hue = isProcessing ? 270 : isDragging ? 200 : textboxOpen ? 210 : (time / 1000 * BLOB.HUE_SPEED) % 360
       const breath = Math.sin(time / 1000 * (Math.PI * 2 / (BLOB.BREATH_PERIOD_MS / 1000))) * BLOB.BREATH_AMPLITUDE
       const radius = BLOB.RADIUS + breath
 
@@ -69,19 +79,56 @@ export function BlobCanvas() {
     }
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
-  }, [expanded, isProcessing])
+  }, [textboxOpen, isProcessing, isDragging])
 
-  const handleClick = useCallback(() => {
-    setExpanded(!expanded)
-  }, [expanded, setExpanded])
+  // Handle blob interaction: distinguish click from drag
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (e.button !== 0) return // Left mouse button only
+    e.preventDefault()
+    
+    dragStartPos.current = { x: e.clientX, y: e.clientY }
+    hasMoved.current = false
+  }, [])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!dragStartPos.current) return
+    
+    const dx = Math.abs(e.clientX - dragStartPos.current.x)
+    const dy = Math.abs(e.clientY - dragStartPos.current.y)
+    
+    // If moved beyond threshold, treat as drag
+    if (!hasMoved.current && (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD)) {
+      hasMoved.current = true
+      setIsDragging(true)
+      invoke('start_dragging').catch(() => {})
+    }
+  }, [setIsDragging])
+
+  const handleMouseUp = useCallback(() => {
+    // If not moved significantly, treat as click
+    if (!hasMoved.current) {
+      setTextboxOpen(!textboxOpen)
+    }
+    setIsDragging(false)
+    hasMoved.current = false
+    dragStartPos.current = { x: 0, y: 0 }
+  }, [textboxOpen, setTextboxOpen, setIsDragging])
 
   return (
     <canvas
       ref={canvasRef}
       width={BLOB.SIZE}
       height={BLOB.SIZE}
-      className="fixed bottom-5 right-5 z-10 cursor-pointer"
-      onClick={handleClick}
+      className="fixed top-1/2 left-1/2 z-20 cursor-grab active:cursor-grabbing"
+      style={{
+        transform: 'translate(-50%, -50%)',
+        touchAction: 'none',
+        backgroundColor: 'transparent',
+      }}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
     />
   )
 }

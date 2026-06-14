@@ -1,21 +1,45 @@
 import { useEffect } from 'react'
 import { BlobCanvas } from '@/components/BlobCanvas'
 import { ChatWidget } from '@/components/ChatWidget'
+import { ChatTextbox } from '@/components/ChatTextbox'
 import { useConfigStore } from '@/stores/config'
 import { useChatStore } from '@/stores/chat'
-import { startSidecar, stopSidecar, onLlmToken, onLlmDone, onLlmError, onAudioChunk, onAudioDone, onSidecarStatus } from '@/lib/api'
+import { startSidecar, stopSidecar, onLlmToken, onLlmDone, onLlmError, onAudioChunk, onAudioDone, onSidecarStatus, setWindowGeometry } from '@/lib/api'
 import { audioPlayer } from '@/lib/audio'
 
 function App() {
   useEffect(() => {
+    // Initialize to collapsed blob window
+    setWindowGeometry(0, 0, 140, 140).catch(() => {})
+  }, [])
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+Space: toggle full chat history panel
       if ((e.ctrlKey || e.metaKey) && e.code === 'Space') {
         e.preventDefault()
         const expanded = useConfigStore.getState().expanded
-        useConfigStore.getState().setExpanded(!expanded)
+        const newExpanded = !expanded
+        useConfigStore.getState().setExpanded(newExpanded)
+
+        // Resize window
+        if (newExpanded) {
+          setWindowGeometry(200, 100, 400, 600).catch(() => {})
+        } else {
+          setWindowGeometry(0, 0, 140, 140).catch(() => {})
+        }
       }
+      // Escape: close textbox or chat panel
       if (e.key === 'Escape') {
-        useConfigStore.getState().setExpanded(false)
+        const textboxOpen = useConfigStore.getState().textboxOpen
+        const expanded = useConfigStore.getState().expanded
+        if (textboxOpen) {
+          useConfigStore.getState().setTextboxOpen(false)
+        } else if (expanded) {
+          useConfigStore.getState().setExpanded(false)
+          // Resize window
+          setWindowGeometry(0, 0, 140, 140).catch(() => {})
+        }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -92,6 +116,7 @@ function App() {
   return (
     <>
       <BlobCanvas />
+      <ChatTextbox />
       <ChatWidget />
     </>
   )

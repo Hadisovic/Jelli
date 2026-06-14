@@ -14,11 +14,12 @@
       {
         "label": "main",
         "title": "Sesame Cat",
-        "width": 400,
-        "height": 60,
-        "minWidth": 320,
-        "minHeight": 60,
+        "width": 140,
+        "height": 140,
+        "minWidth": 140,
+        "minHeight": 140,
         "maxHeight": 600,
+        "maxWidth": 400,
         "decorations": false,
         "transparent": true,
         "resizable": false,
@@ -26,7 +27,7 @@
         "skipTaskbar": true,
         "center": true,
         "visible": true,
-        "shadow": true,
+        "shadow": false,
         "dragDropEnabled": false
       }
     ],

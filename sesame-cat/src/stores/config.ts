@@ -14,7 +14,9 @@ interface ConfigStore {
   contextMessages: number
   quantization: 'fp16' | 'int8' | 'int4'
   vizPreset: VizPreset
-  expanded: boolean
+  expanded: boolean // Chat history panel (Ctrl+Space)
+  textboxOpen: boolean // Quick-input textbox (click blob)
+  isDragging: boolean // Blob dragging state
   setLlmProvider: (p: LLMProvider) => void
   setLlmModel: (m: string) => void
   setApiKey: (k: string) => void
@@ -26,6 +28,8 @@ interface ConfigStore {
   setQuantization: (q: 'fp16' | 'int8' | 'int4') => void
   setVizPreset: (p: VizPreset) => void
   setExpanded: (v: boolean) => void
+  setTextboxOpen: (v: boolean) => void
+  setIsDragging: (v: boolean) => void
 }
 
 export const useConfigStore = create<ConfigStore>((set) => ({
@@ -40,6 +44,8 @@ export const useConfigStore = create<ConfigStore>((set) => ({
   quantization: 'fp16',
   vizPreset: 'orb',
   expanded: false,
+  textboxOpen: false,
+  isDragging: false,
   setLlmProvider: (llmProvider) => set({ llmProvider }),
   setLlmModel: (llmModel) => set({ llmModel }),
   setApiKey: (apiKey) => set({ apiKey }),
@@ -51,4 +57,6 @@ export const useConfigStore = create<ConfigStore>((set) => ({
   setQuantization: (quantization) => set({ quantization }),
   setVizPreset: (vizPreset) => set({ vizPreset }),
   setExpanded: (expanded) => set({ expanded }),
+  setTextboxOpen: (textboxOpen) => set({ textboxOpen }),
+  setIsDragging: (isDragging) => set({ isDragging }),
 }))
