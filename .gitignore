@@ -1,0 +1,18 @@
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Tauri/Rust
+**/target/
+
+# OS/IDEs
+.DS_Store
+.vscode/
+.idea/
+
+# Temp files
+*.log
+**/.git_backup/
+
