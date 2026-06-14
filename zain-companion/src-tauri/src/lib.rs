@@ -140,15 +140,15 @@ pub fn run() {
             // Position window at bottom-right
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_decorations(false);
-                let _ = window.set_shadow(true);
+                let _ = window.set_shadow(false);
                 let _ = window.set_resizable(false);
                 if let Ok(Some(monitor)) = window.current_monitor() {
                     let phys = monitor.size();
                     let scale = monitor.scale_factor();
                     let lw = phys.width as f64 / scale;
                     let lh = phys.height as f64 / scale;
-                    let w = 400.0;
-                    let h = 60.0;
+                    let w = 140.0;
+                    let h = 140.0;
                     let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
                         width: w,
                         height: h,
