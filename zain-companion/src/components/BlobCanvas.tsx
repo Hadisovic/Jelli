@@ -14,9 +14,9 @@ const BELL_SEGS = 80
 const BELL_W = 32
 const BELL_H = 24
 const BELL_BASE_Y = 44
-const TENT_COUNT = 6
+const TENT_COUNT = 4
 const TENT_SEGS = 10
-const TENT_LEN = 28
+const TENT_LEN = 22
 const ORGAN_COUNT = 5
 
 // ── Tentacle ─────────────────────────────────────────────────────────────
@@ -33,7 +33,7 @@ interface Tentacle {
 
 function makeTentacles(): Tentacle[] {
   return Array.from({ length: TENT_COUNT }, (_, i) => {
-    const spread = 28
+    const spread = 18
     const sx = -spread / 2 + (i / (TENT_COUNT - 1)) * spread
     const pts: TPoint[] = Array.from({ length: TENT_SEGS }, (_, j) => ({
       x: sx,
@@ -45,9 +45,9 @@ function makeTentacles(): Tentacle[] {
       pts, sx,
       phase: i * 1.3 + Math.random() * 0.5,
       speed: 0.5 + Math.random() * 0.4,
-      amp: 3.0 + Math.random() * 2.5,
+      amp: 2.0 + Math.random() * 1.5,
       damp: 0.90 + Math.random() * 0.05,
-      width: 1.8 + Math.random() * 1.2,
+      width: 2.8 + Math.random() * 1.5,
     }
   })
 }
