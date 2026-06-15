@@ -10,6 +10,11 @@
   --color-text-primary: rgba(255, 255, 255, 0.9);
   --color-text-secondary: rgba(255, 255, 255, 0.5);
   --spacing-widget: 400px;
+
+  --blob-hue: 180;
+  --blob-sat: 60%;
+  --blob-light: 55%;
+  --blob-alpha: 0.15;
 }
 
 * {
@@ -21,18 +26,22 @@
 html, body, #root {
   width: 100%;
   height: 100%;
-  overflow: hidden;
-  /* Force transparent — overrides any Tailwind/browser base-style background */
+  overflow: visible;
   background: transparent !important;
   background-color: transparent !important;
   user-select: none;
   -webkit-user-select: none;
-  /* dark color-scheme avoids WebView2 injecting a white background */
   color-scheme: dark;
 }
 
 #root {
   position: relative;
+  overflow: visible;
+}
+
+canvas, img, svg {
+  -webkit-user-drag: none;
+  user-select: none;
 }
 
 .glass-panel {
@@ -40,6 +49,285 @@ html, body, #root {
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   border: 1px solid var(--color-glass-border);
+}
+
+/* ── Chat container (fills the chat window) ────────────────────────────── */
+.chat-container {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Chat panel (glassy neumorphism — synced to blob) ──────────────────── */
+.chat-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(
+    155deg,
+    hsla(var(--blob-hue), var(--blob-sat), 14%, 0.82) 0%,
+    hsla(var(--blob-hue), calc(var(--blob-sat) - 8%), 9%, 0.90) 50%,
+    hsla(var(--blob-hue), calc(var(--blob-sat) - 12%), 7%, 0.92) 100%
+  );
+  backdrop-filter: blur(32px) saturate(180%);
+  -webkit-backdrop-filter: blur(32px) saturate(180%);
+  border: 1px solid hsla(var(--blob-hue), var(--blob-sat), var(--blob-light), 0.12);
+  border-radius: 18px;
+  padding: 8px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.6s ease, background 0.6s ease;
+  animation: panel-breathe 6s ease-in-out infinite;
+}
+
+@keyframes panel-breathe {
+  0%, 100% {
+    border-color: hsla(var(--blob-hue), var(--blob-sat), var(--blob-light), 0.10);
+  }
+  50% {
+    border-color: hsla(var(--blob-hue), var(--blob-sat), var(--blob-light), 0.18);
+  }
+}
+
+/* glass highlight (top-left sheen) */
+.chat-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    160deg,
+    hsla(var(--blob-hue), 50%, 80%, 0.07) 0%,
+    transparent 35%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* inner depth shadow (bottom concave) */
+.chat-panel::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 40%;
+  border-radius: inherit;
+  background: linear-gradient(
+    to top,
+    hsla(var(--blob-hue), 20%, 5%, 0.18) 0%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.chat-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Lighting edges on send ────────────────────────────────────────────── */
+.chat-panel.sending {
+  border-color: hsla(var(--blob-hue), var(--blob-sat), var(--blob-light), 0.35);
+  animation: edge-glow 0.6s ease-out;
+}
+
+@keyframes edge-glow {
+  0% {
+    box-shadow:
+      0 0 0 2px hsla(var(--blob-hue), var(--blob-sat), var(--blob-light), 0.4),
+      0 0 32px hsla(var(--blob-hue), var(--blob-sat), var(--blob-light), 0.3),
+      0 0 64px hsla(var(--blob-hue), var(--blob-sat), var(--blob-light), 0.15);
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+
+/* ── Chat response area ────────────────────────────────────────────────── */
+.chat-response {
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  font-weight: 300;
+  line-height: 1.65;
+  letter-spacing: 0.01em;
+  color: rgba(255, 255, 255, 0.72);
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: hsla(var(--blob-hue), var(--blob-sat), 18%, 0.07);
+  border: 1px solid hsla(var(--blob-hue), var(--blob-sat), var(--blob-light), 0.07);
+  box-shadow:
+    inset 0 1px 4px rgba(0, 0, 0, 0.12),
+    inset 0 -1px 2px rgba(255, 255, 255, 0.02);
+  animation: ink-fade-in 0.5s ease-out;
+}
+
+.chat-response::-webkit-scrollbar {
+  width: 4px;
+}
+
+.chat-response::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-response::-webkit-scrollbar-thumb {
+  background: hsla(var(--blob-hue), var(--blob-sat), var(--blob-light), 0.2);
+  border-radius: 2px;
+}
+
+@keyframes ink-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.chat-response .ink-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: hsla(var(--blob-hue), var(--blob-sat), var(--blob-light), 0.6);
+  margin-left: 2px;
+  animation: ink-pulse 1.2s ease-in-out infinite;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+}
+
+@keyframes ink-pulse {
+  0%, 100% { opacity: 0.3; transform: scaleY(0.8); }
+  50% { opacity: 0.8; transform: scaleY(1.1); }
+}
+
+/* ── Chat input row ────────────────────────────────────────────────────── */
+.chat-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Chat input field (synced to blob) ─────────────────────────────────── */
+.chat-input-wrapper {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  border-radius: 14px;
+  background: hsla(var(--blob-hue), var(--blob-sat), 12%, 0.45);
+  border: 1px solid hsla(var(--blob-hue), var(--blob-sat), var(--blob-light), 0.08);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chat-input-wrapper:focus-within {
+  border-color: hsla(var(--blob-hue), var(--blob-sat), var(--blob-light), 0.28);
+  background: hsla(var(--blob-hue), var(--blob-sat), 12%, 0.55);
+  box-shadow:
+    0 0 0 1px hsla(var(--blob-hue), var(--blob-sat), var(--blob-light), 0.06),
+    0 0 20px hsla(var(--blob-hue), var(--blob-sat), var(--blob-light), 0.08),
+    inset 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.chat-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-radius: 13px;
+  padding: 10px 14px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  font-weight: 300;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.88);
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.chat-input::placeholder {
+  color: rgba(255, 255, 255, 0.20);
+  font-weight: 300;
+  letter-spacing: 0.03em;
+}
+
+.chat-input:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── Send button (synced to blob) ──────────────────────────────────────── */
+.send-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(
+    135deg,
+    hsla(var(--blob-hue), var(--blob-sat), calc(var(--blob-light) + 10%), 0.85) 0%,
+    hsla(var(--blob-hue), calc(var(--blob-sat) - 5%), var(--blob-light), 0.75) 100%
+  );
+  color: white;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow:
+    0 2px 10px hsla(var(--blob-hue), var(--blob-sat), var(--blob-light), 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.send-btn:hover:not(:disabled) {
+  transform: scale(1.08);
+  box-shadow:
+    0 4px 20px hsla(var(--blob-hue), var(--blob-sat), var(--blob-light), 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.send-btn:active:not(:disabled) {
+  transform: scale(0.93);
+}
+
+.send-btn:disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
+  filter: saturate(0.2) brightness(0.6);
+}
+
+.send-btn svg {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
+}
+
+.send-spinner {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  border-top-color: rgba(255, 255, 255, 0.65);
+  border-radius: 50%;
+  animation: organic-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes organic-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes audio-bar {
+  0% { transform: scaleY(0.4); }
+  100% { transform: scaleY(1.2); }
+}
+
+@keyframes thinking-dot {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 0.8; transform: scale(1.3); }
 }
 
 .drag-region {
@@ -65,7 +353,6 @@ html, body, #root {
   animation: glow-pulse 1.5s ease-in-out infinite;
 }
 
-/* Settings panel utilities */
 .settings-label {
   display: flex;
   align-items: center;

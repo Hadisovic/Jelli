@@ -14,9 +14,10 @@ interface ConfigStore {
   contextMessages: number
   quantization: 'fp16' | 'int8' | 'int4'
   vizPreset: VizPreset
-  expanded: boolean // Chat history panel (Ctrl+Space)
-  textboxOpen: boolean // Quick-input textbox (click blob)
-  isDragging: boolean // Blob dragging state
+  expanded: boolean
+  textboxOpen: boolean
+  isDragging: boolean
+  blobScreenPos: { x: number; y: number } | null
   setLlmProvider: (p: LLMProvider) => void
   setLlmModel: (m: string) => void
   setApiKey: (k: string) => void
@@ -30,6 +31,7 @@ interface ConfigStore {
   setExpanded: (v: boolean) => void
   setTextboxOpen: (v: boolean) => void
   setIsDragging: (v: boolean) => void
+  setBlobScreenPos: (pos: { x: number; y: number } | null) => void
 }
 
 export const useConfigStore = create<ConfigStore>((set) => ({
@@ -46,6 +48,7 @@ export const useConfigStore = create<ConfigStore>((set) => ({
   expanded: false,
   textboxOpen: false,
   isDragging: false,
+  blobScreenPos: null,
   setLlmProvider: (llmProvider) => set({ llmProvider }),
   setLlmModel: (llmModel) => set({ llmModel }),
   setApiKey: (apiKey) => set({ apiKey }),
@@ -59,4 +62,5 @@ export const useConfigStore = create<ConfigStore>((set) => ({
   setExpanded: (expanded) => set({ expanded }),
   setTextboxOpen: (textboxOpen) => set({ textboxOpen }),
   setIsDragging: (isDragging) => set({ isDragging }),
+  setBlobScreenPos: (blobScreenPos) => set({ blobScreenPos }),
 }))

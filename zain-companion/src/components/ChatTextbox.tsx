@@ -1,12 +1,10 @@
-import { useRef, useEffect, useCallback } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
+import { useRef, useEffect, useCallback, useState } from 'react'
 import { useConfigStore } from '@/stores/config'
 import { useChatStore } from '@/stores/chat'
-import { sendChatMessage } from '@/lib/api'
+import { sendChatMessage, hideChatWindow, resizeWindow } from '@/lib/api'
 
-/**
- * Simple UUID v4 generator using Web Crypto API (no external dependency)
- */
+const CHAT_H_EXPANDED = 250
+
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0
@@ -15,13 +13,7 @@ function generateUUID(): string {
   })
 }
 
-/**
- * ChatTextbox — small floating input that appears above/near the blob when clicked.
- * Sends text to AI on Enter, closes on Escape or click outside.
- */
 export function ChatTextbox() {
-  const textboxOpen = useConfigStore((s) => s.textboxOpen)
-  const setTextboxOpen = useConfigStore((s) => s.setTextboxOpen)
   const addMessage = useChatStore((s) => s.addMessage)
   const setProcessing = useChatStore((s) => s.setProcessing)
   const isProcessing = useChatStore((s) => s.isProcessing)
@@ -37,85 +29,79 @@ export function ChatTextbox() {
 
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const [sendFlash, setSendFlash] = useState(false)
 
-  // Auto-focus when textbox opens
   useEffect(() => {
-    if (textboxOpen && inputRef.current) {
-      setTimeout(() => inputRef.current?.focus(), 50)
-    }
-  }, [textboxOpen])
+    requestAnimationFrame(() => {
+      inputRef.current?.focus()
+    })
+  }, [])
 
-  // Close on Escape or click outside
+  useEffect(() => {
+    if (isProcessing) {
+      resizeWindow(360, CHAT_H_EXPANDED).catch(() => {})
+    }
+  }, [isProcessing])
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && textboxOpen) {
-        setTextboxOpen(false)
+      if (e.key === 'Escape') {
+        hideChatWindow().catch(() => {})
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  useEffect(() => {
+    const root = document.documentElement
+
+    const applyHue = () => {
+      const hue = localStorage.getItem('blob-hue')
+      if (hue) {
+        root.style.setProperty('--blob-hue', hue)
       }
     }
 
-    const handleClickOutside = (e: MouseEvent) => {
-      if (!containerRef.current) return
-      const target = e.target as Node | null
-      if (target && !containerRef.current.contains(target)) {
-        // Ignore clicks that originate from the blob canvas — it is what
-        // opens us in the first place, and we don't want to close immediately.
-        if (target instanceof Element && target.tagName === 'CANVAS') return
-        setTextboxOpen(false)
-      }
-    }
+    applyHue()
+    window.addEventListener('storage', applyHue)
+    const interval = setInterval(applyHue, 100)
 
-    if (textboxOpen) {
-      window.addEventListener('keydown', handleKeyDown)
-      window.addEventListener('click', handleClickOutside)
-      return () => {
-        window.removeEventListener('keydown', handleKeyDown)
-        window.removeEventListener('click', handleClickOutside)
-      }
+    return () => {
+      window.removeEventListener('storage', applyHue)
+      clearInterval(interval)
     }
-  }, [textboxOpen, setTextboxOpen])
+  }, [])
 
   const handleSend = useCallback(async () => {
     const text = inputRef.current?.value.trim()
     if (!text || isProcessing) return
 
-    console.log('[ChatTextbox] Sending message:', text)
+    setSendFlash(true)
+    setTimeout(() => setSendFlash(false), 600)
 
-    // Add user message to chat
-    addMessage({
-      text,
-      role: 'user',
-      status: 'sent',
-    })
+    addMessage({ text, role: 'user', status: 'sent' })
 
-    // Add AI response placeholder
     const assistantMsgId = addMessage({
       text: '',
       role: 'assistant',
       status: 'thinking',
     })
 
-    // Clear input and keep textbox open (don't close yet)
     if (inputRef.current) {
       inputRef.current.value = ''
     }
     setProcessing(true)
 
-    // Send to LLM
     try {
       const requestId = generateUUID()
-      console.log('[ChatTextbox] Request ID:', requestId)
       registerRequest(requestId, assistantMsgId)
 
       const messages = useChatStore.getState().messages.map((m) => ({
         role: m.role,
         content: m.text,
       }))
-
-      console.log('[ChatTextbox] Config:', {
-        provider: config.llmProvider,
-        model: config.llmModel,
-        ollamaUrl: config.ollamaUrl,
-      })
 
       await sendChatMessage(requestId, messages, {
         provider: config.llmProvider,
@@ -127,7 +113,6 @@ export function ChatTextbox() {
         speaker_id: config.speakerId,
         quantization: config.quantization,
       })
-      console.log('[ChatTextbox] Message sent successfully')
     } catch (e) {
       console.error('[ChatTextbox] Failed to send message:', e)
       useChatStore.getState().updateMessage(assistantMsgId, {
@@ -148,73 +133,74 @@ export function ChatTextbox() {
     [handleSend, isProcessing]
   )
 
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    if ((e.target as Element)?.tagName === 'INPUT') return
+    e.preventDefault()
+  }, [])
+
   return (
-    <AnimatePresence>
-      {textboxOpen && (
-        <motion.div
-          ref={containerRef}
-          key="textbox"
-          className="fixed bottom-16 right-5 z-30"
-          initial={{ opacity: 0, scale: 0.8, y: 10 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.8, y: 10 }}
-          transition={{ duration: 0.15, ease: 'easeOut' }}
-        >
-          {/* Textbox container with glassmorphism */}
-          <div className="glass-panel rounded-2xl p-4 shadow-lg w-80 max-h-64">
-            {lastAssistant?.text && (
-              <div className="mb-3 max-h-32 overflow-y-auto text-xs text-white/80 whitespace-pre-wrap break-words border-b border-white/10 pb-3">
-                <div className="flex items-start gap-2">
-                  <div className="flex-1">
-                    {lastAssistant.text}
-                    {(isProcessing || isPlayingAudio) && (
-                      <span className="inline-block w-0.5 h-3 bg-white/50 ml-0.5 align-middle animate-pulse" />
-                    )}
-                  </div>
-                  {isPlayingAudio && (
-                    <div className="flex-shrink-0 flex gap-0.5 items-center" title="Playing audio">
-                      <span className="w-1 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="w-1 h-3 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '100ms' }} />
-                      <span className="w-1 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '200ms' }} />
-                    </div>
-                  )}
-                  {isProcessing && !isPlayingAudio && (
-                    <div className="flex-shrink-0 text-xs text-amber-300" title="Generating voice">🎤</div>
-                  )}
-                </div>
-              </div>
-            )}
-            <div className="flex gap-2 items-center mt-3">
-              <input
-                ref={inputRef}
-                type="text"
-                placeholder="Say something..."
-                className="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-white/50 focus:outline-none focus:border-white/40 focus:ring-1 focus:ring-white/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                onKeyDown={handleKeyDown}
-                disabled={isProcessing}
-              />
-              <button
-                type="button"
-                onClick={handleSend}
-                disabled={isProcessing}
-                className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-gradient-to-br from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 disabled:from-gray-600 disabled:to-gray-700 text-white transition-all disabled:cursor-not-allowed"
-                title="Send (Enter)"
-              >
-                {isProcessing ? (
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-                    <path d="M1.5 7l10.5-5v10L1.5 7z" />
-                  </svg>
+    <div
+      ref={containerRef}
+      className="chat-container"
+      onContextMenu={handleContextMenu}
+    >
+      <div ref={panelRef} className={`chat-panel${sendFlash ? ' sending' : ''}`}>
+        {lastAssistant?.text && (
+          <div className="chat-response">
+            <div className="flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                {lastAssistant.text}
+                {(isProcessing || isPlayingAudio) && (
+                  <span className="ink-cursor" />
                 )}
-              </button>
+              </div>
+              {isPlayingAudio && (
+                <div className="flex-shrink-0 flex gap-[3px] items-center h-4" title="Playing audio">
+                  <span className="w-[3px] h-2 rounded-full" style={{ background: 'hsla(var(--blob-hue), 70%, 65%, 0.8)', animation: 'audio-bar 0.6s ease-in-out infinite alternate', animationDelay: '0ms' }} />
+                  <span className="w-[3px] h-3 rounded-full" style={{ background: 'hsla(var(--blob-hue), 70%, 65%, 0.8)', animation: 'audio-bar 0.6s ease-in-out infinite alternate', animationDelay: '150ms' }} />
+                  <span className="w-[3px] h-2 rounded-full" style={{ background: 'hsla(var(--blob-hue), 70%, 65%, 0.8)', animation: 'audio-bar 0.6s ease-in-out infinite alternate', animationDelay: '300ms' }} />
+                </div>
+              )}
+              {isProcessing && !isPlayingAudio && (
+                <div className="flex-shrink-0 flex gap-[3px] items-center h-4" title="Generating">
+                  <span className="w-[3px] h-[3px] rounded-full" style={{ background: 'hsla(var(--blob-hue), 60%, 60%, 0.5)', animation: 'thinking-dot 1.2s ease-in-out infinite', animationDelay: '0ms' }} />
+                  <span className="w-[3px] h-[3px] rounded-full" style={{ background: 'hsla(var(--blob-hue), 60%, 60%, 0.5)', animation: 'thinking-dot 1.2s ease-in-out infinite', animationDelay: '200ms' }} />
+                  <span className="w-[3px] h-[3px] rounded-full" style={{ background: 'hsla(var(--blob-hue), 60%, 60%, 0.5)', animation: 'thinking-dot 1.2s ease-in-out infinite', animationDelay: '400ms' }} />
+                </div>
+              )}
             </div>
           </div>
+        )}
 
-          {/* Arrow pointing to blob */}
-          <div className="absolute bottom-0 right-6 w-2 h-2 rotate-45 bg-white/20 -translate-y-px" />
-        </motion.div>
-      )}
-    </AnimatePresence>
+        <div className="chat-input-row">
+          <div className="chat-input-wrapper">
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="Say something..."
+              className="chat-input"
+              onKeyDown={handleKeyDown}
+              disabled={isProcessing}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={isProcessing}
+            className="send-btn"
+            title="Send (Enter)"
+          >
+            {isProcessing ? (
+              <div className="send-spinner" />
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 2L11 13" />
+                <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+              </svg>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }

@@ -1,80 +1,59 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { BlobCanvas } from '@/components/BlobCanvas'
 import { ChatWidget } from '@/components/ChatWidget'
 import { ChatTextbox } from '@/components/ChatTextbox'
 import { useConfigStore } from '@/stores/config'
 import { useChatStore } from '@/stores/chat'
-import { startSidecar, stopSidecar, onLlmToken, onLlmDone, onLlmError, onAudioChunk, onAudioDone, onSidecarStatus, setWindowGeometry } from '@/lib/api'
+import { startSidecar, stopSidecar, onLlmToken, onLlmDone, onLlmError, onAudioChunk, onAudioDone, onSidecarStatus, hideChatWindow, getWindowLabel } from '@/lib/api'
 import { audioPlayer } from '@/lib/audio'
 
+const isDev = import.meta.env.DEV
+
 function App() {
+  const [windowLabel, setWindowLabel] = useState('main')
+
   useEffect(() => {
-    // Initialize to collapsed blob window
-    setWindowGeometry(0, 0, 140, 140).catch(() => {})
+    getWindowLabel().then(setWindowLabel).catch(() => {})
   }, [])
 
-  // Auto-resize window when textbox opens/closes
   useEffect(() => {
-    const textboxOpen = useConfigStore.getState().textboxOpen
-    if (textboxOpen) {
-      // Expand window for textbox
-      setWindowGeometry(0, 0, 400, 300).catch(() => {})
-    } else {
-      const expanded = useConfigStore.getState().expanded
-      if (!expanded) {
-        // Collapse back to blob only
-        setWindowGeometry(0, 0, 140, 140).catch(() => {})
+    if (!isDev) {
+      const handler = (e: Event) => {
+        e.preventDefault()
+        e.stopPropagation()
       }
+      document.addEventListener('contextmenu', handler, { capture: true })
+      return () => document.removeEventListener('contextmenu', handler, { capture: true })
     }
   }, [])
 
-  // Subscribe to textboxOpen changes
   useEffect(() => {
-    const unsubscribe = useConfigStore.subscribe(
-      (state) => state.textboxOpen,
-      (textboxOpen) => {
-        if (textboxOpen) {
-          // Expand window for textbox
-          setWindowGeometry(0, 0, 400, 300).catch(() => {})
-        } else {
-          const expanded = useConfigStore.getState().expanded
-          if (!expanded) {
-            // Collapse back to blob only
-            setWindowGeometry(0, 0, 140, 140).catch(() => {})
-          }
+    if (!isDev) {
+      const handler = (e: MouseEvent) => {
+        if (e.button === 2) {
+          e.preventDefault()
         }
       }
-    )
-    return unsubscribe
+      document.addEventListener('mousedown', handler, { capture: true })
+      return () => document.removeEventListener('mousedown', handler, { capture: true })
+    }
   }, [])
 
-  // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+Space: toggle full chat history panel
       if ((e.ctrlKey || e.metaKey) && e.code === 'Space') {
         e.preventDefault()
         const expanded = useConfigStore.getState().expanded
-        const newExpanded = !expanded
-        useConfigStore.getState().setExpanded(newExpanded)
-
-        // Resize window
-        if (newExpanded) {
-          setWindowGeometry(200, 100, 400, 600).catch(() => {})
-        } else {
-          setWindowGeometry(0, 0, 140, 140).catch(() => {})
-        }
+        useConfigStore.getState().setExpanded(!expanded)
       }
-      // Escape: close textbox or chat panel
       if (e.key === 'Escape') {
         const textboxOpen = useConfigStore.getState().textboxOpen
         const expanded = useConfigStore.getState().expanded
         if (textboxOpen) {
           useConfigStore.getState().setTextboxOpen(false)
+          hideChatWindow().catch(() => {})
         } else if (expanded) {
           useConfigStore.getState().setExpanded(false)
-          // Resize window
-          setWindowGeometry(0, 0, 140, 140).catch(() => {})
         }
       }
     }
@@ -82,11 +61,13 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  // Auto-start sidecar on mount (guard against HMR respawn)
+  // Auto-start sidecar only in the main window
   useEffect(() => {
-    // Module-level flag survives HMR, preventing orphan processes
-    if ((window as unknown as Record<string, unknown>)['__sidecarStarted']) return
-    ;(window as unknown as Record<string, unknown>)['__sidecarStarted'] = true
+    if (windowLabel !== 'main') return
+
+    const w = window as unknown as Record<string, unknown>
+    if (w['__sidecarStarted']) return
+    w['__sidecarStarted'] = true
 
     const init = async () => {
       try {
@@ -97,12 +78,12 @@ function App() {
     }
     init()
     return () => {
-      ;(window as unknown as Record<string, unknown>)['__sidecarStarted'] = false
+      w['__sidecarStarted'] = false
       stopSidecar().catch(() => {})
     }
-  }, [])
+  }, [windowLabel])
 
-
+  // LLM event listeners — both windows need them
   useEffect(() => {
     const unlisteners: (() => void)[] = []
 
@@ -117,7 +98,6 @@ function App() {
       const msgId = useChatStore.getState().getMessageIdForRequest(request_id)
       if (msgId) {
         useChatStore.getState().updateMessage(msgId, { status: 'done' })
-        // Keep processing true until TTS completes (audio:done will set it to false)
       }
     }).then((unlisten) => unlisteners.push(unlisten))
 
@@ -139,7 +119,6 @@ function App() {
 
     onAudioDone(() => {
       useChatStore.getState().setPlayingAudio(false)
-      // Audio playback continues from queue; no action needed
     }).then((unlisten) => unlisteners.push(unlisten))
 
     onSidecarStatus(({ status, message }) => {
@@ -151,10 +130,13 @@ function App() {
     }
   }, [])
 
+  if (windowLabel === 'chat') {
+    return <ChatTextbox />
+  }
+
   return (
     <>
       <BlobCanvas />
-      <ChatTextbox />
       <ChatWidget />
     </>
   )

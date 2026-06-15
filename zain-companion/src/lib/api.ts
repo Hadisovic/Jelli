@@ -100,8 +100,42 @@ export async function sendTts(requestId: string, text: string, speakerId: number
 
 // ── Window Commands ────────────────────────────────────────────────────────
 
+export async function getWindowPosition(): Promise<{ x: number; y: number }> {
+  const [x, y] = await invoke<[number, number]>('get_window_position')
+  return { x, y }
+}
+
+export async function setWindowPosition(x: number, y: number): Promise<void> {
+  await invoke('set_window_position', { x, y })
+}
+
+export async function resizeWindow(width: number, height: number): Promise<void> {
+  await invoke('resize_window', { width, height })
+}
+
 export async function setWindowGeometry(x: number, y: number, width: number, height: number): Promise<void> {
   await invoke('set_window_geometry', { x, y, width, height })
+}
+
+export async function getScreenSize(): Promise<{ width: number; height: number }> {
+  const [width, height] = await invoke<[number, number]>('get_screen_size')
+  return { width, height }
+}
+
+export async function showChatWindow(x: number, y: number): Promise<void> {
+  await invoke('show_chat_window', { x, y })
+}
+
+export async function hideChatWindow(): Promise<void> {
+  await invoke('hide_chat_window')
+}
+
+export async function setChatWindowPosition(x: number, y: number): Promise<void> {
+  await invoke('set_chat_window_position', { x, y })
+}
+
+export async function getWindowLabel(): Promise<string> {
+  return await invoke<string>('get_window_label')
 }
 
 // ── Event Listeners ─────────────────────────────────────────────────────────

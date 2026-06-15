@@ -43,15 +43,13 @@ async fn send_chat_message(
     messages: Vec<ChatMessage>,
     config: ProviderConfig,
 ) -> Result<(), String> {
-    // Register cancellation flag
     state.cancel_map.lock().unwrap().insert(request_id.clone(), false);
 
     let rid = request_id.clone();
     let cancel_map = state.cancel_map.clone();
-    let sid = state.sidecar.clone(); // SidecarProcess is behind Arc<Mutex<...>> internally
+    let sid = state.sidecar.clone();
 
     tokio::spawn(async move {
-        // Stream LLM tokens
         let result = llm::stream_llm(
             &window,
             &rid,
@@ -60,13 +58,12 @@ async fn send_chat_message(
             &cancel_map,
         ).await;
 
-        // On completion or error, send full text to TTS
         match result {
             Ok(full_text) => {
                 if !full_text.is_empty() {
-            let speaker_id = config.speaker_id.unwrap_or(0);
-            let quantization = config.quantization.clone().unwrap_or("fp16".into());
-            let _ = sid.send_tts(&rid, &full_text, speaker_id, &quantization).await;
+                    let speaker_id = config.speaker_id.unwrap_or(0);
+                    let quantization = config.quantization.clone().unwrap_or("fp16".into());
+                    let _ = sid.send_tts(&rid, &full_text, speaker_id, &quantization).await;
                 }
             }
             Err(e) => {
@@ -77,7 +74,6 @@ async fn send_chat_message(
             }
         }
 
-        // Clean up cancellation flag
         cancel_map.lock().unwrap().remove(&rid);
     });
 
@@ -104,15 +100,108 @@ async fn send_tts(
     state.sidecar.send_tts(&request_id, &text, speaker_id, &quantization).await
 }
 
+// ── Window commands ──────────────────────────────────────────────────────────
+
 #[tauri::command]
-fn start_dragging(window: tauri::Window) {
-    let _ = window.start_dragging();
+fn get_window_position(window: tauri::Window) -> Result<(f64, f64), String> {
+    match window.outer_position() {
+        Ok(pos) => {
+            let scale = window.scale_factor().unwrap_or(1.0);
+            let result = (pos.x as f64 / scale, pos.y as f64 / scale);
+            println!("[rust] get_window_position → phys=({}, {}) scale={} logical={}", pos.x, pos.y, scale, format!("({:.1}, {:.1})", result.0, result.1));
+            Ok(result)
+        }
+        Err(e) => {
+            let msg = format!("outer_position failed: {}", e);
+            eprintln!("[rust] get_window_position ERROR: {}", msg);
+            Err(msg)
+        }
+    }
+}
+
+#[tauri::command]
+fn set_window_position(window: tauri::Window, x: f64, y: f64) {
+    println!("[rust] set_window_position({:.1}, {:.1})", x, y);
+    let result = window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
+    match result {
+        Ok(()) => println!("[rust] set_window_position OK"),
+        Err(e) => eprintln!("[rust] set_window_position ERROR: {}", e),
+    }
+}
+
+#[tauri::command]
+fn resize_window(window: tauri::Window, width: f64, height: f64) {
+    println!("[rust] resize_window({:.1}, {:.1})", width, height);
+    let result = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width, height }));
+    match result {
+        Ok(()) => println!("[rust] resize_window OK"),
+        Err(e) => eprintln!("[rust] resize_window ERROR: {}", e),
+    }
 }
 
 #[tauri::command]
 fn set_window_geometry(window: tauri::Window, x: f64, y: f64, width: f64, height: f64) {
-    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width, height }));
-    let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
+    println!("[rust] set_window_geometry({:.1}, {:.1}, {:.1}, {:.1})", x, y, width, height);
+    let size_result = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width, height }));
+    match size_result {
+        Ok(()) => println!("[rust] set_size OK"),
+        Err(e) => eprintln!("[rust] set_size ERROR: {}", e),
+    }
+    let pos_result = window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
+    match pos_result {
+        Ok(()) => println!("[rust] set_position OK"),
+        Err(e) => eprintln!("[rust] set_position ERROR: {}", e),
+    }
+}
+
+#[tauri::command]
+fn get_screen_size(window: tauri::Window) -> Result<(f64, f64), String> {
+    match window.current_monitor() {
+        Ok(Some(monitor)) => {
+            let phys = monitor.size();
+            let scale = monitor.scale_factor();
+            let result = (phys.width as f64 / scale, phys.height as f64 / scale);
+            println!("[rust] get_screen_size → {:.1}x{:.1}", result.0, result.1);
+            Ok(result)
+        }
+        Ok(None) => Err("no monitor found".into()),
+        Err(e) => Err(format!("current_monitor failed: {}", e)),
+    }
+}
+
+#[tauri::command]
+fn show_chat_window(app: tauri::AppHandle, x: f64, y: f64) -> Result<(), String> {
+    println!("[rust] show_chat_window({}, {})", x, y);
+    let chat = app.get_webview_window("chat").ok_or("chat window not found")?;
+    chat.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }))
+        .map_err(|e| format!("set_position failed: {}", e))?;
+    chat.show().map_err(|e| format!("show failed: {}", e))?;
+    println!("[rust] show_chat_window OK");
+    Ok(())
+}
+
+#[tauri::command]
+fn hide_chat_window(app: tauri::AppHandle) -> Result<(), String> {
+    println!("[rust] hide_chat_window");
+    let chat = app.get_webview_window("chat").ok_or("chat window not found")?;
+    chat.hide().map_err(|e| format!("hide failed: {}", e))?;
+    println!("[rust] hide_chat_window OK");
+    Ok(())
+}
+
+#[tauri::command]
+fn set_chat_window_position(app: tauri::AppHandle, x: f64, y: f64) -> Result<(), String> {
+    let chat = app.get_webview_window("chat").ok_or("chat window not found")?;
+    chat.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }))
+        .map_err(|e| format!("set_position failed: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn get_window_label(window: tauri::Window) -> String {
+    let label = window.label().to_string();
+    println!("[rust] get_window_label → {}", label);
+    label
 }
 
 // ── Entry point ──────────────────────────────────────────────────────────────
@@ -131,13 +220,12 @@ pub fn run() {
                 )?;
             }
 
-            // Initialize shared state
             app.manage(AppState {
                 cancel_map: Arc::new(Mutex::new(std::collections::HashMap::new())),
                 sidecar: Arc::new(SidecarProcess::new()),
             });
 
-            // Position window at bottom-right
+            // Compact blob-only window, positioned at bottom-right
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_decorations(false);
                 let _ = window.set_shadow(false);
@@ -147,8 +235,10 @@ pub fn run() {
                     let scale = monitor.scale_factor();
                     let lw = phys.width as f64 / scale;
                     let lh = phys.height as f64 / scale;
-                    let w = 140.0;
-                    let h = 140.0;
+                    let w = 120.0;
+                    let h = 120.0;
+                    println!("[rust] setup: monitor={}x{} scale={} logical={}x{}", phys.width, phys.height, scale, lw, lh);
+                    println!("[rust] setup: setting window to {}x{} at ({}, {})", w, h, lw - w - 20.0, lh - h - 40.0);
                     let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
                         width: w,
                         height: h,
@@ -159,14 +249,26 @@ pub fn run() {
                             y: lh - h - 40.0,
                         },
                     ));
+                    // Verify actual position after setup
+                    if let Ok(pos) = window.outer_position() {
+                        let actual = window.inner_size().unwrap_or_default();
+                        println!("[rust] setup: actual outer_position=({}, {}) inner_size={}x{}", pos.x, pos.y, actual.width, actual.height);
+                    }
                 }
             }
 
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            start_dragging,
+            get_window_position,
+            set_window_position,
+            resize_window,
             set_window_geometry,
+            get_screen_size,
+            get_window_label,
+            show_chat_window,
+            hide_chat_window,
+            set_chat_window_position,
             start_sidecar,
             check_sidecar_health,
             stop_sidecar,
