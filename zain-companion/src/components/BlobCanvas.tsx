@@ -9,85 +9,159 @@ const CHAT_W = 360
 const CHAT_H_COLLAPSED = 56
 const CHAT_H_EXPANDED = 250
 
-// ── Plasma anatomy ───────────────────────────────────────────────────────
-const ARC_COUNT = 6
-const ARC_POINTS = 8
-const PARTICLE_COUNT = 24
-const TENDRIL_COUNT = 4
-const TENDRIL_SEGS = 10
-const CORE_RADIUS = 18
+// ── Celestial anatomy ────────────────────────────────────────────────────
+const RAY_COUNT = 12
+const FILAMENT_MAX = 8
+const FILAMENT_SEGMENTS = 12
+const PARTICLE_COUNT = 36
+const TRAIL_LENGTH = 6
+const WAVE_COUNT = 3
+const BLOB_POINTS = 48
+const BASE_RADIUS = 22
 
-interface ArcPoint { x: number; y: number; ox: number; oy: number }
-interface Arc { points: ArcPoint[]; life: number; maxLife: number; hue: number }
+// ── Blob surface (morphing sphere) ──────────────────────────────────────
+interface SurfacePoint {
+  angle: number
+  r: number
+  vr: number
+  targetR: number
+}
+
+function makeSurface(): SurfacePoint[] {
+  return Array.from({ length: BLOB_POINTS }, (_, i) => {
+    const angle = (i / BLOB_POINTS) * Math.PI * 2
+    return { angle, r: BASE_RADIUS, vr: 0, targetR: BASE_RADIUS }
+  })
+}
+
+function updateSurface(pts: SurfacePoint[], t: number) {
+  for (const p of pts) {
+    const n1 = Math.sin(p.angle * 2 + t * 0.8) * 3.0
+    const n2 = Math.cos(p.angle * 3 - t * 0.6) * 2.0
+    const n3 = Math.sin(p.angle * 5 + t * 1.2) * 1.2
+    const n4 = Math.cos(p.angle * 7 - t * 0.9) * 0.7
+    p.targetR = BASE_RADIUS + n1 + n2 + n3 + n4
+    p.vr += (p.targetR - p.r) * 0.07
+    p.vr *= 0.83
+    p.r += p.vr
+  }
+}
+
+function traceSurface(
+  ctx: CanvasRenderingContext2D,
+  pts: SurfacePoint[],
+  cx: number,
+  cy: number,
+) {
+  ctx.beginPath()
+  for (let i = 0; i <= pts.length; i++) {
+    const curr = pts[i % pts.length]
+    const next = pts[(i + 1) % pts.length]
+    const prev = pts[(i - 1 + pts.length) % pts.length]
+    const x = cx + Math.cos(curr.angle) * curr.r
+    const y = cy + Math.sin(curr.angle) * curr.r
+    if (i === 0) {
+      ctx.moveTo(x, y)
+    } else {
+      const cpx1 = x + (Math.cos(curr.angle) - Math.cos(prev.angle)) * curr.r * 0.22
+      const cpy1 = y + (Math.sin(curr.angle) - Math.sin(prev.angle)) * curr.r * 0.22
+      const cpx2 = x - (Math.cos(next.angle) - Math.cos(curr.angle)) * curr.r * 0.22
+      const cpy2 = y - (Math.sin(next.angle) - Math.sin(curr.angle)) * curr.r * 0.22
+      ctx.bezierCurveTo(cpx1, cpy1, cpx2, cpy2, x, y)
+    }
+  }
+  ctx.closePath()
+}
+
+// ── God rays ─────────────────────────────────────────────────────────────
+interface Ray {
+  angle: number
+  width: number
+  len: number
+  speed: number
+  phase: number
+  bright: number
+}
+
+function makeRays(): Ray[] {
+  return Array.from({ length: RAY_COUNT }, (_, i) => ({
+    angle: (i / RAY_COUNT) * Math.PI * 2,
+    width: 0.04 + Math.random() * 0.06,
+    len: 28 + Math.random() * 18,
+    speed: 0.08 + Math.random() * 0.12,
+    phase: Math.random() * Math.PI * 2,
+    bright: 0.3 + Math.random() * 0.4,
+  }))
+}
+
+// ── Plasma filaments ─────────────────────────────────────────────────────
+interface FilSeg { x: number; y: number }
+interface Filament {
+  segs: FilSeg[]
+  life: number
+  maxLife: number
+  hue: number
+  thickness: number
+  branches: number
+}
+
+function makeFilament(cx: number, cy: number, hue: number): Filament {
+  const startAngle = Math.random() * Math.PI * 2
+  const segs: FilSeg[] = []
+  let x = cx + Math.cos(startAngle) * BASE_RADIUS * 0.8
+  let y = cy + Math.sin(startAngle) * BASE_RADIUS * 0.8
+  let a = startAngle
+
+  for (let i = 0; i < FILAMENT_SEGMENTS; i++) {
+    segs.push({ x, y })
+    const f = i / FILAMENT_SEGMENTS
+    a += (Math.random() - 0.5) * 1.2
+    const step = 3 + (1 - f) * 4
+    x += Math.cos(a) * step
+    y += Math.sin(a) * step
+  }
+
+  return {
+    segs,
+    life: 0,
+    maxLife: 0.3 + Math.random() * 0.7,
+    hue: hue + (Math.random() - 0.5) * 30,
+    thickness: 0.8 + Math.random() * 1.5,
+    branches: Math.random() > 0.6 ? 1 : 0,
+  }
+}
+
+// ── Particles with trails ───────────────────────────────────────────────
 interface Particle {
   x: number; y: number
   vx: number; vy: number
+  trail: { x: number; y: number }[]
   life: number; maxLife: number
   size: number; hue: number
   orbit: number; angle: number; speed: number
-}
-interface TendrilPoint { x: number; y: number; vx: number; vy: number }
-interface Tendril {
-  points: TendrilPoint[]
-  phase: number; speed: number; len: number
-  amp: number; damp: number
-}
-
-function makeArc(cx: number, cy: number, hue: number): Arc {
-  const startAngle = Math.random() * Math.PI * 2
-  const endAngle = startAngle + (Math.random() - 0.5) * Math.PI * 0.8
-  const r = 22 + Math.random() * 14
-
-  const points: ArcPoint[] = []
-  for (let i = 0; i < ARC_POINTS; i++) {
-    const f = i / (ARC_POINTS - 1)
-    const a = startAngle + (endAngle - startAngle) * f
-    const jitter = (Math.random() - 0.5) * 8
-    const rx = Math.cos(a) * (r + jitter)
-    const ry = Math.sin(a) * (r + jitter)
-    points.push({ x: cx + rx, y: cy + ry, ox: rx, oy: ry })
-  }
-
-  return { points, life: 0, maxLife: 0.15 + Math.random() * 0.35, hue }
+  spiraling: boolean
 }
 
 function makeParticle(cx: number, cy: number): Particle {
   const angle = Math.random() * Math.PI * 2
-  const orbit = 10 + Math.random() * 28
+  const orbit = 14 + Math.random() * 30
   return {
     x: cx + Math.cos(angle) * orbit,
     y: cy + Math.sin(angle) * orbit,
-    vx: (Math.random() - 0.5) * 0.3,
-    vy: (Math.random() - 0.5) * 0.3,
+    vx: 0, vy: 0,
+    trail: Array.from({ length: TRAIL_LENGTH }, () => ({
+      x: cx + Math.cos(angle) * orbit,
+      y: cy + Math.sin(angle) * orbit,
+    })),
     life: 0,
-    maxLife: 0.4 + Math.random() * 1.2,
-    size: 0.6 + Math.random() * 1.4,
-    hue: 200 + Math.random() * 40,
+    maxLife: 0.8 + Math.random() * 2.0,
+    size: 0.5 + Math.random() * 1.5,
+    hue: 200 + Math.random() * 50,
     orbit,
     angle,
-    speed: 0.3 + Math.random() * 0.8,
+    speed: 0.2 + Math.random() * 0.6,
+    spiraling: Math.random() > 0.7,
   }
-}
-
-function makeTendrils(cx: number, cy: number): Tendril[] {
-  return Array.from({ length: TENDRIL_COUNT }, (_, i) => {
-    const baseAngle = (i / TENDRIL_COUNT) * Math.PI * 2
-    const baseX = cx + Math.cos(baseAngle) * 20
-    const baseY = cy + Math.sin(baseAngle) * 20
-    const points: TendrilPoint[] = Array.from({ length: TENDRIL_SEGS }, (_, j) => ({
-      x: baseX + Math.cos(baseAngle) * j * 2.5,
-      y: baseY + Math.sin(baseAngle) * j * 2.5,
-      vx: 0, vy: 0,
-    }))
-    return {
-      points,
-      phase: i * 1.8 + Math.random(),
-      speed: 0.6 + Math.random() * 0.5,
-      len: 22 + Math.random() * 10,
-      amp: 3 + Math.random() * 4,
-      damp: 0.88 + Math.random() * 0.06,
-    }
-  })
 }
 
 // ── Component ───────────────────────────────────────────────────────────
@@ -118,246 +192,351 @@ export function BlobCanvas() {
     const cx = w / 2
     const cy = h / 2
 
-    const arcs: Arc[] = []
+    const surface = makeSurface()
+    const rays = makeRays()
     const particles: Particle[] = Array.from({ length: PARTICLE_COUNT }, () => makeParticle(cx, cy))
-    const tendrils = makeTendrils(cx, cy)
-    let arcTimer = 0
+    const filaments: Filament[] = []
+    let filTimer = 0
 
     const draw = (time: number) => {
       ctx.clearRect(0, 0, w, h)
       const t = time / 1000
       const hue = isProcessing ? 270 : isDragging ? 200 : (t * BLOB.HUE_SPEED) % 360
+      const pm = isProcessing ? 1.5 : 1.0
 
       // ── Pulse ─────────────────────────────────────────────────────
       const pp = t * (Math.PI * 2 / (BLOB.BREATH_PERIOD_MS / 1000))
       const pulse = Math.sin(pp)
-      const pm = isProcessing ? 1.6 : 1.0
-      const coreR = CORE_RADIUS + pulse * 2.5
+      const pI = (pulse + 1) * 0.5
+      const coreR = BASE_RADIUS + pulse * 2
+
+      // ── Surface morphing ──────────────────────────────────────────
+      updateSurface(surface, t)
 
       // ══════════════════════════════════════════════════════════════
-      // LAYER 1 — Corona glow
+      // LAYER 1 — Gravitational lensing (background distortion)
       // ══════════════════════════════════════════════════════════════
-      const coronaR = 48
-      const cG = ctx.createRadialGradient(cx, cy, coreR * 0.5, cx, cy, coronaR)
-      cG.addColorStop(0, `hsla(${hue}, 70%, 65%, 0.12)`)
-      cG.addColorStop(0.3, `hsla(${hue}, 65%, 55%, 0.06)`)
-      cG.addColorStop(0.6, `hsla(${hue + 10}, 60%, 45%, 0.02)`)
-      cG.addColorStop(1, `hsla(${hue + 20}, 50%, 30%, 0)`)
+      const lensR = 52
+      const lG = ctx.createRadialGradient(cx, cy, coreR, cx, cy, lensR)
+      lG.addColorStop(0, `hsla(${hue}, 40%, 50%, 0.06)`)
+      lG.addColorStop(0.4, `hsla(${hue}, 35%, 40%, 0.03)`)
+      lG.addColorStop(0.7, `hsla(${hue}, 30%, 35%, 0.01)`)
+      lG.addColorStop(1, `hsla(${hue}, 25%, 30%, 0)`)
       ctx.beginPath()
-      ctx.arc(cx, cy, coronaR, 0, Math.PI * 2)
-      ctx.fillStyle = cG
+      ctx.arc(cx, cy, lensR, 0, Math.PI * 2)
+      ctx.fillStyle = lG
       ctx.fill()
 
-      // ══════════════════════════════════════════════════════════════
-      // LAYER 2 — Tendrils (energy streams)
-      // ══════════════════════════════════════════════════════════════
-      const t2t = t
-      for (const ten of tendrils) {
-        const bx = cx + Math.cos(ten.phase) * 20
-        const by = cy + Math.sin(ten.phase) * 20
-        ten.points[0].x = bx
-        ten.points[0].y = by
+      // Chromatic aberration ring
+      ctx.beginPath()
+      ctx.arc(cx, cy, lensR - 2, 0, Math.PI * 2)
+      ctx.strokeStyle = `hsla(${hue + 15}, 50%, 60%, 0.04)`
+      ctx.lineWidth = 2
+      ctx.stroke()
 
-        for (let i = 1; i < ten.points.length; i++) {
-          const p = ten.points[i]
-          const f = i / TENDRIL_SEGS
-          const wave = Math.sin(t2t * ten.speed * pm + ten.phase + f * 3) * ten.amp * f
-          const tx = bx + Math.cos(ten.phase + f * 0.5) * f * ten.len + wave * Math.cos(ten.phase + Math.PI / 2)
-          const ty = by + Math.sin(ten.phase + f * 0.5) * f * ten.len + wave * Math.sin(ten.phase + Math.PI / 2)
-          p.vx += (tx - p.x) * 0.06
-          p.vy += (ty - p.y) * 0.06
-          p.vx *= ten.damp
-          p.vy *= ten.damp
-          p.x += p.vx
-          p.y += p.vy
+      // ══════════════════════════════════════════════════════════════
+      // LAYER 2 — God rays (volumetric light)
+      // ══════════════════════════════════════════════════════════════
+      for (const ray of rays) {
+        const ra = ray.angle + t * ray.speed
+        const flicker = Math.sin(t * 2.5 + ray.phase) * 0.3 + 0.7
+        const alpha = ray.bright * flicker * (0.7 + pI * 0.3) * pm
+        const len = ray.len * (0.8 + pulse * 0.15) * pm
+
+        // Outer ray (wide, faint)
+        ctx.beginPath()
+        ctx.moveTo(cx, cy)
+        ctx.lineTo(
+          cx + Math.cos(ra - ray.width) * len,
+          cy + Math.sin(ra - ray.width) * len,
+        )
+        ctx.lineTo(
+          cx + Math.cos(ra + ray.width) * len,
+          cy + Math.sin(ra + ray.width) * len,
+        )
+        ctx.closePath()
+
+        const rG = ctx.createRadialGradient(cx, cy, coreR * 0.5, cx, cy, len)
+        rG.addColorStop(0, `hsla(${hue + 10}, 60%, 80%, ${alpha * 0.6})`)
+        rG.addColorStop(0.3, `hsla(${hue + 5}, 55%, 70%, ${alpha * 0.3})`)
+        rG.addColorStop(0.7, `hsla(${hue}, 50%, 60%, ${alpha * 0.08})`)
+        rG.addColorStop(1, `hsla(${hue - 5}, 45%, 50%, 0)`)
+        ctx.fillStyle = rG
+        ctx.fill()
+
+        // Inner ray (narrow, bright)
+        ctx.beginPath()
+        ctx.moveTo(cx, cy)
+        ctx.lineTo(
+          cx + Math.cos(ra - ray.width * 0.3) * len * 0.7,
+          cy + Math.sin(ra - ray.width * 0.3) * len * 0.7,
+        )
+        ctx.lineTo(
+          cx + Math.cos(ra + ray.width * 0.3) * len * 0.7,
+          cy + Math.sin(ra + ray.width * 0.3) * len * 0.7,
+        )
+        ctx.closePath()
+        ctx.fillStyle = `hsla(${hue + 15}, 65%, 85%, ${alpha * 0.2})`
+        ctx.fill()
+      }
+
+      // ══════════════════════════════════════════════════════════════
+      // LAYER 3 — Plasma filaments (branching lightning)
+      // ══════════════════════════════════════════════════════════════
+      filTimer += 1 / 60
+      const filInterval = isProcessing ? 0.05 : 0.18
+      if (filTimer > filInterval && filaments.length < FILAMENT_MAX) {
+        filaments.push(makeFilament(cx, cy, hue))
+        filTimer = 0
+      }
+
+      for (let f = filaments.length - 1; f >= 0; f--) {
+        const fil = filaments[f]
+        fil.life += 1 / 60
+        if (fil.life >= fil.maxLife) {
+          filaments.splice(f, 1)
+          continue
         }
 
-        // Draw tendril with tapering stroke
-        for (let i = 0; i < ten.points.length - 1; i++) {
-          const f0 = i / (ten.points.length - 1)
-          const f1 = (i + 1) / (ten.points.length - 1)
-          const w0 = 2.2 * (1 - f0 * 0.85)
-          const w1 = 2.2 * (1 - f1 * 0.85)
-          const a0 = 0.35 * (1 - f0 * 0.7)
-          const a1 = 0.35 * (1 - f1 * 0.7)
+        const lifeFrac = fil.life / fil.maxLife
+        const alpha = lifeFrac < 0.2 ? lifeFrac / 0.2 : 1 - (lifeFrac - 0.2) / 0.8
+
+        // Bright core
+        ctx.beginPath()
+        ctx.moveTo(fil.segs[0].x, fil.segs[0].y)
+        for (let i = 1; i < fil.segs.length; i++) {
+          ctx.lineTo(fil.segs[i].x, fil.segs[i].y)
+        }
+        ctx.strokeStyle = `hsla(${fil.hue}, 80%, 90%, ${0.8 * alpha})`
+        ctx.lineWidth = fil.thickness
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+        ctx.stroke()
+
+        // Glow
+        ctx.beginPath()
+        ctx.moveTo(fil.segs[0].x, fil.segs[0].y)
+        for (let i = 1; i < fil.segs.length; i++) {
+          ctx.lineTo(fil.segs[i].x, fil.segs[i].y)
+        }
+        ctx.strokeStyle = `hsla(${fil.hue}, 70%, 75%, ${0.25 * alpha})`
+        ctx.lineWidth = fil.thickness * 4
+        ctx.stroke()
+
+        // Wide halo
+        ctx.beginPath()
+        ctx.moveTo(fil.segs[0].x, fil.segs[0].y)
+        for (let i = 1; i < fil.segs.length; i++) {
+          ctx.lineTo(fil.segs[i].x, fil.segs[i].y)
+        }
+        ctx.strokeStyle = `hsla(${fil.hue}, 60%, 65%, ${0.06 * alpha})`
+        ctx.lineWidth = fil.thickness * 10
+        ctx.stroke()
+
+        // Branch
+        if (fil.branches && fil.segs.length > 4) {
+          const bi = Math.floor(fil.segs.length * 0.4)
+          const bp = fil.segs[bi]
+          const ba = Math.atan2(
+            fil.segs[bi + 1].y - bp.y,
+            fil.segs[bi + 1].x - bp.x,
+          ) + (Math.random() > 0.5 ? 0.8 : -0.8)
 
           ctx.beginPath()
-          ctx.moveTo(ten.points[i].x, ten.points[i].y)
-          ctx.lineTo(ten.points[i + 1].x, ten.points[i + 1].y)
-
-          const segG = ctx.createLinearGradient(
-            ten.points[i].x, ten.points[i].y,
-            ten.points[i + 1].x, ten.points[i + 1].y,
-          )
-          segG.addColorStop(0, `hsla(${hue}, 70%, 70%, ${a0})`)
-          segG.addColorStop(1, `hsla(${hue + 15}, 65%, 60%, ${a1})`)
-          ctx.strokeStyle = segG
-          ctx.lineWidth = w0
-          ctx.lineCap = 'round'
+          ctx.moveTo(bp.x, bp.y)
+          ctx.lineTo(bp.x + Math.cos(ba) * 10, bp.y + Math.sin(ba) * 10)
+          ctx.strokeStyle = `hsla(${fil.hue}, 75%, 85%, ${0.5 * alpha})`
+          ctx.lineWidth = fil.thickness * 0.6
           ctx.stroke()
         }
       }
 
       // ══════════════════════════════════════════════════════════════
-      // LAYER 3 — Arcs (lightning)
+      // LAYER 4 — Energy waves (surface ripples)
       // ══════════════════════════════════════════════════════════════
-      arcTimer += 1 / 60
-      const arcInterval = isProcessing ? 0.04 : 0.12
-      if (arcTimer > arcInterval && arcs.length < ARC_COUNT) {
-        arcs.push(makeArc(cx, cy, hue + (Math.random() - 0.5) * 20))
-        arcTimer = 0
-      }
+      for (let w = 0; w < WAVE_COUNT; w++) {
+        const waveR = coreR + 2 + w * 3
+        const wavePhase = t * (1.5 + w * 0.3) + w * 2.1
+        const waveAlpha = 0.08 * (1 - w * 0.25) * pm
 
-      for (let a = arcs.length - 1; a >= 0; a--) {
-        const arc = arcs[a]
-        arc.life += 1 / 60
-        if (arc.life >= arc.maxLife) {
-          arcs.splice(a, 1)
-          continue
-        }
-
-        const lifeFrac = arc.life / arc.maxLife
-        const alpha = lifeFrac < 0.3
-          ? lifeFrac / 0.3
-          : 1 - (lifeFrac - 0.3) / 0.7
-
-        // Bright core of arc
         ctx.beginPath()
-        ctx.moveTo(arc.points[0].x, arc.points[0].y)
-        for (let i = 1; i < arc.points.length; i++) {
-          ctx.lineTo(arc.points[i].x, arc.points[i].y)
+        for (let i = 0; i <= 64; i++) {
+          const a = (i / 64) * Math.PI * 2
+          const wobble = Math.sin(a * 6 + wavePhase) * 1.5
+          const r = waveR + wobble
+          const x = cx + Math.cos(a) * r
+          const y = cy + Math.sin(a) * r
+          if (i === 0) ctx.moveTo(x, y)
+          else ctx.lineTo(x, y)
         }
-        ctx.strokeStyle = `hsla(${arc.hue}, 80%, 88%, ${0.7 * alpha})`
-        ctx.lineWidth = 1.8
-        ctx.lineCap = 'round'
-        ctx.lineJoin = 'round'
-        ctx.stroke()
-
-        // Glow around arc
-        ctx.beginPath()
-        ctx.moveTo(arc.points[0].x, arc.points[0].y)
-        for (let i = 1; i < arc.points.length; i++) {
-          ctx.lineTo(arc.points[i].x, arc.points[i].y)
-        }
-        ctx.strokeStyle = `hsla(${arc.hue}, 70%, 70%, ${0.2 * alpha})`
-        ctx.lineWidth = 5
+        ctx.closePath()
+        ctx.strokeStyle = `hsla(${hue + 20}, 55%, 70%, ${waveAlpha})`
+        ctx.lineWidth = 0.6
         ctx.stroke()
       }
 
       // ══════════════════════════════════════════════════════════════
-      // LAYER 4 — Plasma body
+      // LAYER 5 — Stellar body (core)
       // ══════════════════════════════════════════════════════════════
-      const bodyG = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR + 4)
-      bodyG.addColorStop(0, `hsla(${hue + 15}, 55%, 75%, 0.22)`)
-      bodyG.addColorStop(0.3, `hsla(${hue + 8}, 60%, 60%, 0.35)`)
-      bodyG.addColorStop(0.6, `hsla(${hue}, 65%, 48%, 0.48)`)
-      bodyG.addColorStop(0.85, `hsla(${hue - 8}, 70%, 38%, 0.55)`)
-      bodyG.addColorStop(1, `hsla(${hue - 15}, 75%, 28%, 0.62)`)
-      ctx.beginPath()
-      ctx.arc(cx, cy, coreR + 4, 0, Math.PI * 2)
-      ctx.fillStyle = bodyG
+      traceSurface(ctx, surface, cx, cy)
+      const bG = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR + 6)
+      bG.addColorStop(0, `hsla(${hue + 20}, 30%, 98%, 0.75)`)
+      bG.addColorStop(0.15, `hsla(${hue + 12}, 45%, 92%, 0.60)`)
+      bG.addColorStop(0.35, `hsla(${hue + 5}, 55%, 78%, 0.50)`)
+      bG.addColorStop(0.6, `hsla(${hue}, 62%, 60%, 0.55)`)
+      bG.addColorStop(0.85, `hsla(${hue - 8}, 68%, 45%, 0.62)`)
+      bG.addColorStop(1, `hsla(${hue - 15}, 72%, 32%, 0.70)`)
+      ctx.fillStyle = bG
       ctx.fill()
 
       // ══════════════════════════════════════════════════════════════
-      // LAYER 5 — Core (hot center)
+      // LAYER 6 — Corona (atmosphere)
       // ══════════════════════════════════════════════════════════════
-      const coreG = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 0.6)
-      coreG.addColorStop(0, `hsla(${hue + 30}, 40%, 98%, 0.65)`)
-      coreG.addColorStop(0.2, `hsla(${hue + 20}, 50%, 90%, 0.45)`)
-      coreG.addColorStop(0.5, `hsla(${hue + 10}, 60%, 75%, 0.2)`)
-      coreG.addColorStop(1, `hsla(${hue}, 65%, 60%, 0)`)
+      const corR = coreR + 6
+      const cG = ctx.createRadialGradient(cx, cy, corR * 0.7, cx, cy, corR + 10)
+      cG.addColorStop(0, `hsla(${hue + 10}, 55%, 70%, ${0.18 + pI * 0.08})`)
+      cG.addColorStop(0.4, `hsla(${hue + 5}, 50%, 60%, ${0.08 + pI * 0.04})`)
+      cG.addColorStop(0.7, `hsla(${hue}, 45%, 50%, ${0.03})`)
+      cG.addColorStop(1, `hsla(${hue - 5}, 40%, 40%, 0)`)
       ctx.beginPath()
-      ctx.arc(cx, cy, coreR * 0.6, 0, Math.PI * 2)
-      ctx.fillStyle = coreG
+      ctx.arc(cx, cy, corR + 10, 0, Math.PI * 2)
+      ctx.fillStyle = cG
       ctx.fill()
 
       // ══════════════════════════════════════════════════════════════
-      // LAYER 6 — Particles (orbiting energy)
+      // LAYER 7 — Particles with trails
       // ══════════════════════════════════════════════════════════════
       for (const p of particles) {
         p.life += 1 / 60
         if (p.life >= p.maxLife) {
           Object.assign(p, makeParticle(cx, cy))
           p.life = 0
+          continue
         }
 
-        p.angle += p.speed * pm * 0.02
+        // Orbit + spiral
+        p.angle += p.speed * pm * 0.018
         const lifeFrac = p.life / p.maxLife
-        const fadeIn = Math.min(lifeFrac * 5, 1)
-        const fadeOut = lifeFrac > 0.7 ? 1 - (lifeFrac - 0.7) / 0.3 : 1
+        const fadeIn = Math.min(lifeFrac * 4, 1)
+        const fadeOut = lifeFrac > 0.65 ? 1 - (lifeFrac - 0.65) / 0.35 : 1
         const alpha = fadeIn * fadeOut
 
-        // Drift toward/away from center
-        const drift = Math.sin(p.life * 2 + p.angle) * 3
-        const px = cx + Math.cos(p.angle) * (p.orbit + drift)
-        const py = cy + Math.sin(p.angle) * (p.orbit + drift)
+        let px: number, py: number
+        if (p.spiraling) {
+          // Spiral inward toward core
+          const spiralR = p.orbit * (1 - lifeFrac * 0.7)
+          px = cx + Math.cos(p.angle) * spiralR
+          py = cy + Math.sin(p.angle) * spiralR
+        } else {
+          const drift = Math.sin(p.life * 1.5 + p.angle) * 3
+          px = cx + Math.cos(p.angle) * (p.orbit + drift)
+          py = cy + Math.sin(p.angle) * (p.orbit + drift)
+        }
+
+        // Update trail
+        p.trail.unshift({ x: px, y: py })
+        if (p.trail.length > TRAIL_LENGTH) p.trail.pop()
+
+        // Draw trail
+        for (let i = 1; i < p.trail.length; i++) {
+          const tf = 1 - i / p.trail.length
+          const ta = alpha * tf * 0.4
+          const tw = p.size * 0.4 * tf
+          ctx.beginPath()
+          ctx.moveTo(p.trail[i - 1].x, p.trail[i - 1].y)
+          ctx.lineTo(p.trail[i].x, p.trail[i].y)
+          ctx.strokeStyle = `hsla(${p.hue}, 65%, 75%, ${ta})`
+          ctx.lineWidth = tw
+          ctx.lineCap = 'round'
+          ctx.stroke()
+        }
 
         // Particle glow
-        const pG = ctx.createRadialGradient(px, py, 0, px, py, p.size * 3)
-        pG.addColorStop(0, `hsla(${p.hue}, 75%, 85%, ${0.55 * alpha})`)
-        pG.addColorStop(0.4, `hsla(${p.hue}, 65%, 70%, ${0.18 * alpha})`)
+        const pG = ctx.createRadialGradient(px, py, 0, px, py, p.size * 3.5)
+        pG.addColorStop(0, `hsla(${p.hue}, 75%, 88%, ${0.55 * alpha})`)
+        pG.addColorStop(0.35, `hsla(${p.hue}, 65%, 72%, ${0.18 * alpha})`)
         pG.addColorStop(1, `hsla(${p.hue}, 55%, 55%, 0)`)
         ctx.beginPath()
-        ctx.arc(px, py, p.size * 3, 0, Math.PI * 2)
+        ctx.arc(px, py, p.size * 3.5, 0, Math.PI * 2)
         ctx.fillStyle = pG
         ctx.fill()
 
         // Particle core
         ctx.beginPath()
-        ctx.arc(px, py, p.size * 0.5, 0, Math.PI * 2)
-        ctx.fillStyle = `hsla(${p.hue}, 30%, 98%, ${0.8 * alpha})`
+        ctx.arc(px, py, p.size * 0.45, 0, Math.PI * 2)
+        ctx.fillStyle = `hsla(${p.hue}, 30%, 98%, ${0.85 * alpha})`
         ctx.fill()
       }
 
       // ══════════════════════════════════════════════════════════════
-      // LAYER 7 — Inner filaments
+      // LAYER 8 — Specular highlight
       // ══════════════════════════════════════════════════════════════
-      for (let i = 0; i < 5; i++) {
-        const a1 = (i / 5) * Math.PI * 2 + t * 0.4
-        const a2 = a1 + Math.PI * (0.3 + Math.sin(t * 2 + i) * 0.15)
-        const r1 = 3 + Math.sin(t * 3 + i * 1.5) * 2
-        const r2 = coreR * 0.7 + Math.cos(t * 2.5 + i) * 3
-
-        ctx.beginPath()
-        ctx.moveTo(cx + Math.cos(a1) * r1, cy + Math.sin(a1) * r1)
-        ctx.lineTo(cx + Math.cos(a2) * r2, cy + Math.sin(a2) * r2)
-        ctx.strokeStyle = `hsla(${hue + 20}, 60%, 80%, 0.15)`
-        ctx.lineWidth = 0.8
-        ctx.stroke()
-      }
-
-      // ══════════════════════════════════════════════════════════════
-      // LAYER 8 — Edge glow
-      // ══════════════════════════════════════════════════════════════
+      const spX = cx - 6
+      const spY = cy - coreR * 0.4
+      const spG = ctx.createRadialGradient(spX, spY, 0, spX, spY, 8)
+      spG.addColorStop(0, `hsla(${hue + 30}, 25%, 100%, 0.72)`)
+      spG.addColorStop(0.3, `hsla(${hue + 20}, 35%, 96%, 0.30)`)
+      spG.addColorStop(0.7, `hsla(${hue + 10}, 45%, 88%, 0.06)`)
+      spG.addColorStop(1, `hsla(${hue}, 55%, 80%, 0)`)
       ctx.beginPath()
-      ctx.arc(cx, cy, coreR + 4, 0, Math.PI * 2)
-      ctx.strokeStyle = `hsla(${hue}, 55%, 70%, 0.14)`
-      ctx.lineWidth = 1.5
+      ctx.ellipse(spX, spY, 8, 4.5, -0.25, 0, Math.PI * 2)
+      ctx.fillStyle = spG
+      ctx.fill()
+
+      // ══════════════════════════════════════════════════════════════
+      // LAYER 9 — Edge rim
+      // ══════════════════════════════════════════════════════════════
+      traceSurface(ctx, surface, cx, cy)
+      ctx.strokeStyle = `hsla(${hue + 10}, 50%, 72%, 0.12)`
+      ctx.lineWidth = 1
       ctx.stroke()
 
       // ══════════════════════════════════════════════════════════════
-      // LAYER 9 — Processing (energy surge)
+      // LAYER 10 — Processing (stellar flare)
       // ══════════════════════════════════════════════════════════════
       if (isProcessing) {
         const pp2 = Math.sin(t * 5) * 0.3 + 0.7
 
-        // Expanding rings
+        // Expanding energy rings
         for (let r = 0; r < 3; r++) {
-          const ringPhase = (t * 2 + r * 0.7) % 2
+          const ringPhase = (t * 2.5 + r * 0.6) % 2
           const ringAlpha = ringPhase < 1 ? ringPhase : 2 - ringPhase
-          const ringR = coreR + 6 + ringPhase * 14
+          const ringR = coreR + 5 + ringPhase * 16
 
           ctx.beginPath()
           ctx.arc(cx, cy, ringR, 0, Math.PI * 2)
-          ctx.strokeStyle = `hsla(${hue + 10}, 70%, 72%, ${0.12 * ringAlpha * pp2})`
+          ctx.strokeStyle = `hsla(${hue + 15}, 65%, 75%, ${0.10 * ringAlpha * pp2})`
           ctx.lineWidth = 1.2
           ctx.stroke()
         }
 
-        // Extra arcs during processing
-        if (arcTimer > 0.02 && arcs.length < ARC_COUNT + 3) {
-          arcs.push(makeArc(cx, cy, hue + (Math.random() - 0.5) * 30))
-          arcTimer = 0
+        // Extra filaments during processing
+        if (filTimer > 0.03 && filaments.length < FILAMENT_MAX + 4) {
+          filaments.push(makeFilament(cx, cy, hue + (Math.random() - 0.5) * 20))
+          filTimer = 0
+        }
+
+        // Plasma prominences (surface eruptions)
+        for (let p = 0; p < 2; p++) {
+          const promAngle = t * 0.3 + p * Math.PI
+          const promLen = 8 + Math.sin(t * 3 + p) * 4
+          const px1 = cx + Math.cos(promAngle) * coreR
+          const py1 = cy + Math.sin(promAngle) * coreR
+          const px2 = cx + Math.cos(promAngle) * (coreR + promLen)
+          const py2 = cy + Math.sin(promAngle) * (coreR + promLen)
+
+          const pG = ctx.createLinearGradient(px1, py1, px2, py2)
+          pG.addColorStop(0, `hsla(${hue + 10}, 60%, 75%, ${0.25 * pp2})`)
+          pG.addColorStop(0.5, `hsla(${hue + 5}, 55%, 65%, ${0.10 * pp2})`)
+          pG.addColorStop(1, `hsla(${hue}, 50%, 55%, 0)`)
+
+          ctx.beginPath()
+          ctx.moveTo(px1, py1)
+          ctx.lineTo(px2, py2)
+          ctx.strokeStyle = pG
+          ctx.lineWidth = 2.5
+          ctx.lineCap = 'round'
+          ctx.stroke()
         }
       }
 
