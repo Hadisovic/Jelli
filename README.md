@@ -39,12 +39,12 @@ Experience a dynamic desktop companion that morphs organically based on your int
 
 | **Idle (Normal)** | **Shy (Cursor Hover)** | **Happy (Petting)** |
 | :---: | :---: | :---: |
-| <img src="docs/images/normal_mode.png" width="160" alt="Normal Mode" /> | <img src="docs/images/cursor_close.png" width="160" alt="Cursor Close" /> | <img src="docs/images/happy_patting.png" width="160" alt="Happy Mode" /> |
+| <img src="docs/Images/Normal.png" width="160" alt="Normal Mode" /> | <img src="docs/Images/Close.png" width="160" alt="Cursor Close" /> | <img src="docs/Images/Happy.png" width="160" alt="Happy Mode" /> |
 | Baseline calm state with gentle breathing and cycling gradients | Blushes and tracks the mouse cursor system-wide | Warm green/yellow glow with cute crescent-smile eyes |
 
 | **Sleep** | **Dizzy (Dragging)** | **Rage (Angry)** |
 | :---: | :---: | :---: |
-| <img src="docs/images/sleep.png" width="160" alt="Sleep Mode" /> | <img src="docs/images/dizzy.png" width="160" alt="Dizzy Mode" /> | <img src="docs/images/angry.png" width="160" alt="Angry Mode" /> |
+| <img src="docs/Images/Sleep.png" width="160" alt="Sleep Mode" /> | <img src="docs/Images/Dizzy.png" width="160" alt="Dizzy Mode" /> | <img src="docs/Images/Rage.png" width="160" alt="Angry Mode" /> |
 | Deep purple body with peaceful sleeping eyelids and floating "zZz" particles | Erratic physics and spinning stars orbit the blob post-drag | Intense crimson-red body with an animated anger vein 💢 |
 
 ---
