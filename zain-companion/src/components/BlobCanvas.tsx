@@ -33,7 +33,7 @@ interface Tentacle {
 
 function makeTentacles(): Tentacle[] {
   return Array.from({ length: TENT_COUNT }, (_, i) => {
-    const spread = 14
+    const spread = 22
     const sx = -spread / 2 + (i / (TENT_COUNT - 1)) * spread
     const pts: TPoint[] = Array.from({ length: TENT_SEGS }, (_, j) => ({
       x: sx,
@@ -47,7 +47,7 @@ function makeTentacles(): Tentacle[] {
       speed: 0.5 + Math.random() * 0.4,
       amp: 1.5 + Math.random() * 1.2,
       damp: 0.90 + Math.random() * 0.05,
-      width: 2.8 + Math.random() * 1.5,
+      width: 3.5 + Math.random() * 2.0,
     }
   })
 }
