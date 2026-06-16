@@ -107,51 +107,26 @@ fn get_window_position(window: tauri::Window) -> Result<(f64, f64), String> {
     match window.outer_position() {
         Ok(pos) => {
             let scale = window.scale_factor().unwrap_or(1.0);
-            let result = (pos.x as f64 / scale, pos.y as f64 / scale);
-            println!("[rust] get_window_position → phys=({}, {}) scale={} logical={}", pos.x, pos.y, scale, format!("({:.1}, {:.1})", result.0, result.1));
-            Ok(result)
+            Ok((pos.x as f64 / scale, pos.y as f64 / scale))
         }
-        Err(e) => {
-            let msg = format!("outer_position failed: {}", e);
-            eprintln!("[rust] get_window_position ERROR: {}", msg);
-            Err(msg)
-        }
+        Err(e) => Err(format!("outer_position failed: {}", e)),
     }
 }
 
 #[tauri::command]
 fn set_window_position(window: tauri::Window, x: f64, y: f64) {
-    println!("[rust] set_window_position({:.1}, {:.1})", x, y);
-    let result = window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
-    match result {
-        Ok(()) => println!("[rust] set_window_position OK"),
-        Err(e) => eprintln!("[rust] set_window_position ERROR: {}", e),
-    }
+    let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
 }
 
 #[tauri::command]
 fn resize_window(window: tauri::Window, width: f64, height: f64) {
-    println!("[rust] resize_window({:.1}, {:.1})", width, height);
-    let result = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width, height }));
-    match result {
-        Ok(()) => println!("[rust] resize_window OK"),
-        Err(e) => eprintln!("[rust] resize_window ERROR: {}", e),
-    }
+    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width, height }));
 }
 
 #[tauri::command]
 fn set_window_geometry(window: tauri::Window, x: f64, y: f64, width: f64, height: f64) {
-    println!("[rust] set_window_geometry({:.1}, {:.1}, {:.1}, {:.1})", x, y, width, height);
-    let size_result = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width, height }));
-    match size_result {
-        Ok(()) => println!("[rust] set_size OK"),
-        Err(e) => eprintln!("[rust] set_size ERROR: {}", e),
-    }
-    let pos_result = window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
-    match pos_result {
-        Ok(()) => println!("[rust] set_position OK"),
-        Err(e) => eprintln!("[rust] set_position ERROR: {}", e),
-    }
+    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width, height }));
+    let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
 }
 
 #[tauri::command]
@@ -160,9 +135,7 @@ fn get_screen_size(window: tauri::Window) -> Result<(f64, f64), String> {
         Ok(Some(monitor)) => {
             let phys = monitor.size();
             let scale = monitor.scale_factor();
-            let result = (phys.width as f64 / scale, phys.height as f64 / scale);
-            println!("[rust] get_screen_size → {:.1}x{:.1}", result.0, result.1);
-            Ok(result)
+            Ok((phys.width as f64 / scale, phys.height as f64 / scale))
         }
         Ok(None) => Err("no monitor found".into()),
         Err(e) => Err(format!("current_monitor failed: {}", e)),
@@ -171,21 +144,17 @@ fn get_screen_size(window: tauri::Window) -> Result<(f64, f64), String> {
 
 #[tauri::command]
 fn show_chat_window(app: tauri::AppHandle, x: f64, y: f64) -> Result<(), String> {
-    println!("[rust] show_chat_window({}, {})", x, y);
     let chat = app.get_webview_window("chat").ok_or("chat window not found")?;
     chat.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }))
         .map_err(|e| format!("set_position failed: {}", e))?;
     chat.show().map_err(|e| format!("show failed: {}", e))?;
-    println!("[rust] show_chat_window OK");
     Ok(())
 }
 
 #[tauri::command]
 fn hide_chat_window(app: tauri::AppHandle) -> Result<(), String> {
-    println!("[rust] hide_chat_window");
     let chat = app.get_webview_window("chat").ok_or("chat window not found")?;
     chat.hide().map_err(|e| format!("hide failed: {}", e))?;
-    println!("[rust] hide_chat_window OK");
     Ok(())
 }
 
@@ -199,9 +168,7 @@ fn set_chat_window_position(app: tauri::AppHandle, x: f64, y: f64) -> Result<(),
 
 #[tauri::command]
 fn get_window_label(window: tauri::Window) -> String {
-    let label = window.label().to_string();
-    println!("[rust] get_window_label → {}", label);
-    label
+    window.label().to_string()
 }
 
 // ── Entry point ──────────────────────────────────────────────────────────────
@@ -235,10 +202,8 @@ pub fn run() {
                     let scale = monitor.scale_factor();
                     let lw = phys.width as f64 / scale;
                     let lh = phys.height as f64 / scale;
-                    let w = 120.0;
-                    let h = 120.0;
-                    println!("[rust] setup: monitor={}x{} scale={} logical={}x{}", phys.width, phys.height, scale, lw, lh);
-                    println!("[rust] setup: setting window to {}x{} at ({}, {})", w, h, lw - w - 20.0, lh - h - 40.0);
+                    let w = 200.0;
+                    let h = 200.0;
                     let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
                         width: w,
                         height: h,
@@ -249,11 +214,6 @@ pub fn run() {
                             y: lh - h - 40.0,
                         },
                     ));
-                    // Verify actual position after setup
-                    if let Ok(pos) = window.outer_position() {
-                        let actual = window.inner_size().unwrap_or_default();
-                        println!("[rust] setup: actual outer_position=({}, {}) inner_size={}x{}", pos.x, pos.y, actual.width, actual.height);
-                    }
                 }
             }
 

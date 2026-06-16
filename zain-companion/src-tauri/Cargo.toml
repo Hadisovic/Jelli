@@ -29,3 +29,23 @@ uuid = { version = "1", features = ["v4"] }
 futures-util = "0.3"
 base64 = "0.22"
 bytes = "1"
+
+# ─── Dev build speed optimisations ───────────────────────────────────────────
+# Your own code: no optimisation, minimal debug info → fastest incremental compile
+[profile.dev]
+opt-level = 0
+debug = 1          # line numbers only (not full DWARF) → smaller, faster
+incremental = true
+
+# Dependencies: compile once at opt-level 3, then cached forever
+# This makes the app run at full speed while keeping YOUR rebuild times short
+[profile.dev.package."*"]
+opt-level = 3
+debug = false
+
+# Release stays at max optimisation for production builds
+[profile.release]
+opt-level = 3
+lto = "thin"       # thin LTO = good balance of speed & size
+codegen-units = 1
+strip = true

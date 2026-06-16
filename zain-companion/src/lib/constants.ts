@@ -6,28 +6,27 @@ export const WIDGET = {
 } as const;
 
 export const BLOB = {
-  SIZE: 100,
-  RADIUS: 35,
-  BREATH_AMPLITUDE: 3.5,
+  SIZE: 200,
+  HALF: 100,
   BREATH_PERIOD_MS: 3800,
-  HUE_SPEED: 15,             // deg/s in idle
-  NOISE_AMPLITUDE: 2.5,
-  NOISE_SPEED: 0.7,
-  POSITION: { right: 20, bottom: 20 },
-  PALETTE: [
-    { h: 220, s: 0.65, l: 0.45 },
-    { h: 260, s: 0.60, l: 0.50 },
-    { h: 290, s: 0.55, l: 0.55 },
-    { h: 320, s: 0.50, l: 0.60 },
-  ],
-  EXPANDED_PALETTE: [
-    { h: 190, s: 0.70, l: 0.50 },
-    { h: 210, s: 0.65, l: 0.55 },
-    { h: 240, s: 0.60, l: 0.50 },
-  ],
-  THINKING_PALETTE: [
-    { h: 270, s: 0.80, l: 0.65 },
-  ],
+  HUE_SPEED: 12,
+  BODY_RADIUS: 38,
+  DOME_SQUASH: 0.72,
+  TENDRIL_COUNT: 6,
+  TENDRIL_SEGMENTS: 5,
+  SPARKLE_COUNT: 16,
+  EYE_SPACING: 14,
+  EYE_Y_OFFSET: -10,
+  EYE_WIDTH: 7,
+  EYE_HEIGHT: 9,
+  PUPIL_RADIUS: 2.8,
+  PUPIL_TRACK_RANGE: 2.5,
+  PUPIL_LAG: 0.08,
+  SQUISH_RECOVER: 0.06,
+  DRAG_STRETCH_MAX: 1.35,
+  CLICK_BOUNCE_DURATION: 400,
+  IDLE_HUE_MIN: 170,
+  IDLE_HUE_MAX: 220,
 } as const;
 
 export const TIMING = {
