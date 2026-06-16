@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Read(//c/Files/Sesame/**)",
-      "Read(//c/Users/Hadi/**)"
-    ]
-  }
-}

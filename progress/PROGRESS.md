@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-06-16
 **Status:** Active development
-**Branch:** `redesign/metaball-blob`
+**Branch:** `master`
 
 ---
 
@@ -777,6 +777,12 @@ cd csm && pip install -e .
   - Adjusted HSL target colors during the mad sequence (`madT1` and the target red in `inTransition`) by changing the red hue from `0` to `360`. This mathematical shift forces color interpolation (`mixHue`) to pass through purple/blue/magenta (`180 → 270 → 360`) instead of green/yellow/orange (`180 → 90 → 0`) when returning to normal mode.
 - **Eliminated Drag Overlay in Dizzy Mode:**
   - Modified the `><` overlay condition to only render if `expression !== 'dizzy' && expression !== 'mad'`, immediately hiding the dragging overlay when dizzy mode starts and preventing it from overlapping the white dizzy spirals.
+
+### 11. Project Rename & Folder Reorganization
+- **Project Folder Rename:**
+  - Renamed the main project directory from `zain-companion` to `jelli-companion` to align with the Jelli rebranding.
+- **Reference Updates:**
+  - Updated name references in `package-lock.json` to use `"jelli-companion"` instead of `"zain-companion"`.
 
 ---
 
