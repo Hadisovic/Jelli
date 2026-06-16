@@ -1,0 +1,5 @@
+# ─── Fast linker for dev builds (Windows) ───────────────────────────────────
+# lld ships with the Rust toolchain on Windows – no extra install needed.
+# Cuts link time dramatically (30s → 2-5s on most machines).
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld"
