@@ -13,7 +13,7 @@ const CHAT_H_EXPANDED = 250
 const BELL_SEGS = 80
 const BELL_W = 32
 const BELL_H = 24
-const BELL_BASE_Y = 44
+const BELL_BASE_Y = 38
 const TENT_COUNT = 4
 const TENT_SEGS = 12
 const TENT_LEN = 32
@@ -132,10 +132,10 @@ export function BlobCanvas() {
     if (!ctx) return
 
     let raf: number
-    const w = canvas.width
-    const h = canvas.height
+    const w = 90
+    const h = 120
     const cx = w / 2
-    const cy = h / 2
+    const cy = 40
 
     const tents = makeTentacles()
     const organs = makeOrgans()
@@ -472,7 +472,7 @@ export function BlobCanvas() {
     getScreenSize().then((s) => { screenSizeRef.current = s }).catch(() => {})
     getWindowPosition().then((wp) => {
       startWindowRef.current = wp
-      setBlobScreenPos({ x: wp.x + 60, y: wp.y + 60 })
+      setBlobScreenPos({ x: wp.x + 45, y: wp.y + 60 })
     }).catch(() => {})
 
     const onMove = (me: MouseEvent) => {
@@ -488,10 +488,10 @@ export function BlobCanvas() {
       const nx = startWindowRef.current.x + dx
       const ny = startWindowRef.current.y + dy
       setWindowPosition(nx, ny).catch(() => {})
-      setBlobScreenPos({ x: nx + 60, y: ny + 60 })
+      setBlobScreenPos({ x: nx + 45, y: ny + 60 })
       if (useConfigStore.getState().textboxOpen) {
         const sc = screenSizeRef.current || { width: 1920, height: 1080 }
-        let chatX = Math.max(0, Math.min(nx + 60 - CHAT_W * 0.5, sc.width - CHAT_W))
+        let chatX = Math.max(0, Math.min(nx + 45 - CHAT_W * 0.5, sc.width - CHAT_W))
         let chatY = Math.max(0, Math.min(ny + BLOB.SIZE + 10, sc.height - CHAT_H_EXPANDED))
         setChatWindowPosition(chatX, chatY).catch(() => {})
       }
@@ -510,9 +510,9 @@ export function BlobCanvas() {
           hideChatWindow().catch(() => {})
         } else {
           Promise.all([getWindowPosition(), getScreenSize()]).then(([wp, sc]) => {
-            let chatX = Math.max(0, Math.min(wp.x + 60 - CHAT_W * 0.5, sc.width - CHAT_W))
+            let chatX = Math.max(0, Math.min(wp.x + 45 - CHAT_W * 0.5, sc.width - CHAT_W))
             let chatY = Math.max(0, Math.min(wp.y + BLOB.SIZE + 10, sc.height - CHAT_H_COLLAPSED))
-            setBlobScreenPos({ x: wp.x + 60, y: wp.y + BLOB.SIZE - 60 })
+            setBlobScreenPos({ x: wp.x + 45, y: wp.y + BLOB.SIZE - 60 })
             setTextboxOpen(true)
             showChatWindow(chatX, chatY).catch(() => {})
           }).catch(() => {})
@@ -539,8 +539,8 @@ export function BlobCanvas() {
   return (
     <canvas
       ref={canvasRef}
-      width={BLOB.SIZE}
-      height={BLOB.SIZE}
+      width={90}
+      height={120}
       className="fixed z-20 cursor-grab active:cursor-grabbing"
       style={{
         left: '50%',

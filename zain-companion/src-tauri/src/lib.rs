@@ -235,7 +235,7 @@ pub fn run() {
                     let scale = monitor.scale_factor();
                     let lw = phys.width as f64 / scale;
                     let lh = phys.height as f64 / scale;
-                    let w = 120.0;
+                    let w = 90.0;
                     let h = 120.0;
                     println!("[rust] setup: monitor={}x{} scale={} logical={}x{}", phys.width, phys.height, scale, lw, lh);
                     println!("[rust] setup: setting window to {}x{} at ({}, {})", w, h, lw - w - 20.0, lh - h - 40.0);

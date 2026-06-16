@@ -6,7 +6,7 @@ export const WIDGET = {
 } as const;
 
 export const BLOB = {
-  SIZE: 100,
+  SIZE: 90,
   RADIUS: 35,
   BREATH_AMPLITUDE: 3.5,
   BREATH_PERIOD_MS: 3800,
