@@ -24,6 +24,7 @@
 14. [Build & Run Commands](#14-build--run-commands)
 15. [Key Decisions](#15-key-decisions)
 16. [Notes](#16-notes)
+17. [Recent Updates](#17-recent-updates)
 
 ---
 
@@ -674,6 +675,20 @@ cd csm && pip install -e .
 - TTS model planned to switch from Sesame CSM to **Dia 2** (https://github.com/nari-labs/dia2)
 - Phase 5 (Particles + Installer) is planned but not started — excluded from this progress file
 - Phase 3 (Desktop Awareness) is deferred — may be skipped entirely
+
+---
+
+## 17. Recent Updates (June 16, 2026)
+
+### 1. Multi-Monitor Chat Box Display Fix
+- **Issue:** The chat box was stuck on the primary display and did not follow the main window coordinates correctly.
+- **Fix:** Cleaned up window and screen scale positioning math in both `lib.rs` and `BlobCanvas.tsx`, removing debug print statements that were clogging IPC, ensuring smooth cross-screen behavior.
+
+### 2. Dev Build Speed & Linker Optimization
+- **Goal:** Reduce compile and rebuild times which were taking up to 10 minutes.
+- **Changes:**
+  - Added `zain-companion/src-tauri/.cargo/config.toml` configuring the `rust-lld` fast linker for Windows MSVC (dramatically reducing link times).
+  - Modified `Cargo.toml` `[profile.dev]` settings: local code builds at `opt-level = 0` and `debug = 1` for fast compilation, while external dependencies compile at `opt-level = 3` to run at full speed and utilize cached builds.
 
 ---
 
