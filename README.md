@@ -42,10 +42,10 @@ Experience a dynamic desktop companion that morphs organically based on your int
 | <img src="docs/images/normal_mode.png" width="160" alt="Normal Mode" /> | <img src="docs/images/cursor_close.png" width="160" alt="Cursor Close" /> | <img src="docs/images/happy_patting.png" width="160" alt="Happy Mode" /> |
 | Baseline calm state with gentle breathing and cycling gradients | Blushes and tracks the mouse cursor system-wide | Warm green/yellow glow with cute crescent-smile eyes |
 
-| **Dizzy (Dragging)** | **Rage (Angry)** |
-| :---: | :---: |
-| <img src="docs/images/dizzy.png" width="160" alt="Dizzy Mode" /> | <img src="docs/images/angry.png" width="160" alt="Angry Mode" /> |
-| Erratic physics and spinning stars orbit the blob post-drag | Intense crimson-red body with an animated anger vein 💢 |
+| **Sleep** | **Dizzy (Dragging)** | **Rage (Angry)** |
+| :---: | :---: | :---: |
+| <img src="docs/images/sleep.png" width="160" alt="Sleep Mode" /> | <img src="docs/images/dizzy.png" width="160" alt="Dizzy Mode" /> | <img src="docs/images/angry.png" width="160" alt="Angry Mode" /> |
+| Deep purple body with peaceful sleeping eyelids and floating "zZz" particles | Erratic physics and spinning stars orbit the blob post-drag | Intense crimson-red body with an animated anger vein 💢 |
 
 ---
 
