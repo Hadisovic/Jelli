@@ -170,6 +170,23 @@ fn get_screen_size(window: tauri::Window) -> Result<(f64, f64), String> {
 }
 
 #[tauri::command]
+fn get_screen_info(window: tauri::Window) -> Result<((f64, f64), (f64, f64)), String> {
+    match window.current_monitor() {
+        Ok(Some(monitor)) => {
+            let phys = monitor.size();
+            let pos = monitor.position();
+            let scale = monitor.scale_factor();
+            let size = (phys.width as f64 / scale, phys.height as f64 / scale);
+            let position = (pos.x as f64 / scale, pos.y as f64 / scale);
+            println!("[rust] get_screen_info → pos={:?} size={:?}", position, size);
+            Ok((position, size))
+        }
+        Ok(None) => Err("no monitor found".into()),
+        Err(e) => Err(format!("current_monitor failed: {}", e)),
+    }
+}
+
+#[tauri::command]
 fn show_chat_window(app: tauri::AppHandle, x: f64, y: f64) -> Result<(), String> {
     println!("[rust] show_chat_window({}, {})", x, y);
     let chat = app.get_webview_window("chat").ok_or("chat window not found")?;
@@ -202,6 +219,20 @@ fn get_window_label(window: tauri::Window) -> String {
     let label = window.label().to_string();
     println!("[rust] get_window_label → {}", label);
     label
+}
+
+#[tauri::command]
+fn get_cursor_position() -> Result<(f64, f64), String> {
+    unsafe {
+        use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
+        use windows_sys::Win32::Foundation::POINT;
+        let mut pt = POINT { x: 0, y: 0 };
+        if GetCursorPos(&mut pt) != 0 {
+            Ok((pt.x as f64, pt.y as f64))
+        } else {
+            Err("GetCursorPos failed".into())
+        }
+    }
 }
 
 // ── Entry point ──────────────────────────────────────────────────────────────
@@ -265,7 +296,9 @@ pub fn run() {
             resize_window,
             set_window_geometry,
             get_screen_size,
+            get_screen_info,
             get_window_label,
+            get_cursor_position,
             show_chat_window,
             hide_chat_window,
             set_chat_window_position,

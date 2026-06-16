@@ -2,12 +2,15 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useConfigStore } from '@/stores/config'
 import { useChatStore } from '@/stores/chat'
 import { BLOB } from '@/lib/constants'
-import { getWindowPosition, setWindowPosition, showChatWindow, hideChatWindow, getScreenSize, setChatWindowPosition } from '@/lib/api'
+import { getWindowPosition, setWindowPosition, showChatWindow, hideChatWindow, getScreenInfo, setChatWindowPosition, getCursorPosition } from '@/lib/api'
 
 const DRAG_THRESHOLD = 6
 const CHAT_W = 360
 const CHAT_H_COLLAPSED = 56
 const CHAT_H_EXPANDED = 250
+
+// ── Expressions ──────────────────────────────────────────────────────────
+type Expression = 'idle' | 'annoyed' | 'dizzy' | 'sleepy' | 'happy' | 'surprised' | 'shy'
 
 // ── Jellyfish anatomy ────────────────────────────────────────────────────
 const BELL_SEGS = 80
@@ -17,7 +20,6 @@ const BELL_BASE_Y = 38
 const TENT_COUNT = 4
 const TENT_SEGS = 12
 const TENT_LEN = 32
-const ORGAN_COUNT = 5
 
 // ── Tentacle ─────────────────────────────────────────────────────────────
 interface TPoint { x: number; y: number; vx: number; vy: number }
@@ -116,7 +118,6 @@ export function BlobCanvas() {
   const didDragRef = useRef(false)
   const startScreenRef = useRef<{ x: number; y: number } | null>(null)
   const startWindowRef = useRef<{ x: number; y: number } | null>(null)
-  const screenSizeRef = useRef<{ width: number; height: number } | null>(null)
 
   // Eye state
   const eyeTargetRef = useRef({ x: 0, y: 0 })
@@ -140,37 +141,157 @@ export function BlobCanvas() {
     const tents = makeTentacles()
     const organs = makeOrgans()
 
-    // Track mouse for eye direction
-    const onMouseMove = (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect()
-      const mx = e.clientX - rect.left - cx
-      const my = e.clientY - rect.top - cy
-      const dist = Math.sqrt(mx * mx + my * my)
-      const maxShift = 3.5
-      if (dist > 0) {
-        eyeTargetRef.current = {
-          x: (mx / dist) * Math.min(maxShift, dist * 0.05),
-          y: (my / dist) * Math.min(maxShift, dist * 0.05),
+    // ── Expression tracking ────────────────────────────────────────
+    let dragStartTime = 0
+    let lastInteractionTime = Date.now()
+    let lastMouseTime = Date.now()
+    let mouseSpeed = 0
+    let mouseNearBlob = false
+    let happyCooldown = 0
+    let dizzyStars: { angle: number; dist: number; speed: number }[] = []
+    let dizzyWobble = 0
+
+    // Track system cursor for eye direction (works even outside window)
+    let blobScreenX = 0
+    let blobScreenY = 0
+    let lastCursorX = 0
+    let lastCursorY = 0
+
+    // Get initial blob position
+    getWindowPosition().then((wp) => {
+      blobScreenX = wp.x + cx
+      blobScreenY = wp.y + cy
+    }).catch(() => {})
+
+    // Poll system cursor at ~60fps
+    const cursorInterval = setInterval(() => {
+      Promise.all([getCursorPosition(), getWindowPosition()]).then(([cursor, wp]) => {
+        blobScreenX = wp.x + cx
+        blobScreenY = wp.y + cy
+
+        const dx = cursor.x - blobScreenX
+        const dy = cursor.y - blobScreenY
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        const maxShift = 3.5
+        if (dist > 0) {
+          eyeTargetRef.current = {
+            x: (dx / dist) * Math.min(maxShift, dist * 0.05),
+            y: (dy / dist) * Math.min(maxShift, dist * 0.05),
+          }
         }
-      }
-    }
-    window.addEventListener('mousemove', onMouseMove)
+
+        // Mouse speed tracking
+        const now = Date.now()
+        const dt = (now - lastMouseTime) / 1000
+        if (dt > 0) {
+          const dmx = cursor.x - lastCursorX
+          const dmy = cursor.y - lastCursorY
+          mouseSpeed = Math.sqrt(dmx * dmx + dmy * dmy) / dt
+        }
+        lastCursorX = cursor.x
+        lastCursorY = cursor.y
+        lastMouseTime = now
+        lastInteractionTime = now
+
+        // Is mouse near blob?
+        mouseNearBlob = dist < 120
+      }).catch(() => {})
+    }, 16)
 
     const draw = (time: number) => {
       ctx.clearRect(0, 0, w, h)
       const t = time / 1000
       const hue = isProcessing ? 270 : isDragging ? 200 : (t * BLOB.HUE_SPEED) % 360
 
+      // ── Expression determination ─────────────────────────────────
+      const now = Date.now()
+      const idleMs = now - lastInteractionTime
+      const dragMs = isDragging ? (dragStartTime === 0 ? 0 : now - dragStartTime) : 0
+
+      // Start drag timer
+      if (isDragging && dragStartTime === 0) {
+        dragStartTime = now
+      }
+      if (!isDragging) {
+        dragStartTime = 0
+      }
+
+      let expression: Expression = 'idle'
+
+      if (isProcessing) {
+        expression = 'idle' // processing has its own visual (rings)
+      } else if (isDragging) {
+        if (dragMs > 2500) {
+          expression = 'dizzy'
+        } else {
+          expression = 'annoyed'
+        }
+      } else if (idleMs > 8000) {
+        expression = 'sleepy'
+      } else if (happyCooldown > 0) {
+        happyCooldown -= 1 / 60
+        expression = 'happy'
+      } else if (mouseSpeed > 800 && mouseNearBlob) {
+        expression = 'surprised'
+      } else if (mouseNearBlob) {
+        expression = 'shy'
+      }
+
+      // Random happy expression when idle
+      if (expression === 'idle' && !isDragging && !isProcessing) {
+        if (Math.random() < 0.0008 && happyCooldown <= 0) {
+          happyCooldown = 2 + Math.random() * 2
+          expression = 'happy'
+        }
+      }
+
+      // Dizzy stars management
+      if (expression === 'dizzy') {
+        dizzyWobble = Math.sin(t * 6) * 3
+        // Add stars gradually
+        if (dizzyStars.length < 5 && Math.random() < 0.05) {
+          dizzyStars.push({
+            angle: Math.random() * Math.PI * 2,
+            dist: 14 + Math.random() * 6,
+            speed: 1.5 + Math.random() * 1,
+          })
+        }
+        // Update star angles
+        for (const star of dizzyStars) {
+          star.angle += star.speed * (1 / 60)
+        }
+      } else {
+        dizzyStars = []
+        dizzyWobble *= 0.9
+      }
+
       // ── Pulse ─────────────────────────────────────────────────────
       const pp = t * (Math.PI * 2 / (BLOB.BREATH_PERIOD_MS / 1000))
       const pulse = Math.sin(pp)
-      const sx = 1 + pulse * 0.06
+      const sx = 1 + pulse * 0.06 + dizzyWobble * 0.01
       const sy = 1 - pulse * 0.08
       const pm = isProcessing ? 2.0 : 1.0
 
       // ── Eye tracking ──────────────────────────────────────────────
       const ep = eyePosRef.current
       const et = eyeTargetRef.current
+
+      // Dizzy eyes spin instead of tracking
+      if (expression === 'dizzy') {
+        const spinAngle = t * 3
+        eyeTargetRef.current = {
+          x: Math.cos(spinAngle) * 2.5,
+          y: Math.sin(spinAngle) * 2.5,
+        }
+      }
+
+      // Shy eyes look toward mouse (but offset slightly)
+      if (expression === 'shy') {
+        // Keep normal tracking but减弱
+        et.x *= 0.6
+        et.y *= 0.6
+      }
+
       ep.x += (et.x - ep.x) * 0.08
       ep.y += (et.y - ep.y) * 0.08
 
@@ -192,8 +313,17 @@ export function BlobCanvas() {
         ? Math.sin((blinkPhaseRef.current / 0.2) * Math.PI)
         : 0
 
-      // Eye squint (processing = focused, idle = relaxed)
-      const squint = isProcessing ? 0.15 : 0
+      // Eye squint per expression
+      let squint = 0
+      if (isProcessing) squint = 0.15
+      else if (expression === 'annoyed') squint = 0.12
+      else if (expression === 'sleepy') squint = 0.35
+      else if (expression === 'shy') squint = 0.05
+
+      // Happy eyes = ^_^ (no blink, just curved)
+      const isHappyEyes = expression === 'happy'
+      // Surprised = extra wide
+      const isSurprised = expression === 'surprised'
 
       // ── Tentacle physics ──────────────────────────────────────────
       for (const ten of tents) {
@@ -202,10 +332,14 @@ export function BlobCanvas() {
         ten.pts[0].x = ax
         ten.pts[0].y = ay
 
+        // Dizzy tentacles go erratic
+        const tentAmp = expression === 'dizzy' ? ten.amp * 2.0 : ten.amp
+        const tentSpeed = expression === 'dizzy' ? ten.speed * 1.8 : ten.speed
+
         for (let i = 1; i < ten.pts.length; i++) {
           const p = ten.pts[i]
           const f = i / TENT_SEGS
-          const wave = Math.sin(t * ten.speed * pm + ten.phase + f * 2.8) * ten.amp * f
+          const wave = Math.sin(t * tentSpeed * pm + ten.phase + f * 2.8) * tentAmp * f
           const tx = ax + wave
           const ty = ay + f * TENT_LEN
           p.vx += (tx - p.x) * 0.04
@@ -224,14 +358,15 @@ export function BlobCanvas() {
       }))
 
       // ══════════════════════════════════════════════════════════════
-      // LAYER 1 — Ambient glow
+      // LAYER 1 — Ambient glow (strong, wide)
       // ══════════════════════════════════════════════════════════════
-      const glowR = 52
-      const gG = ctx.createRadialGradient(cx, cy, 8, cx, cy, glowR)
-      gG.addColorStop(0, `hsla(${hue}, 68%, 60%, 0.16)`)
-      gG.addColorStop(0.35, `hsla(${hue}, 62%, 52%, 0.07)`)
-      gG.addColorStop(0.65, `hsla(${hue}, 55%, 44%, 0.02)`)
-      gG.addColorStop(1, `hsla(${hue}, 48%, 35%, 0)`)
+      const glowR = 58
+      const gG = ctx.createRadialGradient(cx, cy, 6, cx, cy, glowR)
+      gG.addColorStop(0, `hsla(${hue}, 72%, 65%, 0.28)`)
+      gG.addColorStop(0.25, `hsla(${hue}, 68%, 58%, 0.14)`)
+      gG.addColorStop(0.5, `hsla(${hue}, 60%, 48%, 0.06)`)
+      gG.addColorStop(0.75, `hsla(${hue}, 52%, 40%, 0.02)`)
+      gG.addColorStop(1, `hsla(${hue}, 45%, 32%, 0)`)
       ctx.beginPath()
       ctx.arc(cx, cy, glowR, 0, Math.PI * 2)
       ctx.fillStyle = gG
@@ -245,7 +380,6 @@ export function BlobCanvas() {
           const f0 = i / (ten.pts.length - 1)
           const f1 = (i + 1) / (ten.pts.length - 1)
           const w0 = ten.width * (1 - f0 * 0.8)
-          const w1 = ten.width * (1 - f1 * 0.8)
           const a0 = 0.35 * (1 - f0 * 0.75)
           const a1 = 0.35 * (1 - f1 * 0.75)
 
@@ -267,17 +401,31 @@ export function BlobCanvas() {
       }
 
       // ══════════════════════════════════════════════════════════════
-      // LAYER 3 — Bell body (translucent dome)
+      // LAYER 3 — Bell body (transparent with strong glow center)
       // ══════════════════════════════════════════════════════════════
       traceBell(ctx, cx, cy, sx, sy, t)
       const bG = ctx.createRadialGradient(cx, cy - 2, 0, cx, cy + 2, BELL_H + 6)
-      bG.addColorStop(0, `hsla(${hue}, 58%, 66%, 0.16)`)
-      bG.addColorStop(0.25, `hsla(${hue}, 62%, 56%, 0.26)`)
-      bG.addColorStop(0.55, `hsla(${hue}, 56%, 46%, 0.34)`)
-      bG.addColorStop(0.8, `hsla(${hue}, 50%, 38%, 0.40)`)
-      bG.addColorStop(1, `hsla(${hue}, 44%, 28%, 0.46)`)
+      bG.addColorStop(0, `hsla(${hue}, 72%, 88%, ${0.22 + pulse * 0.06})`)
+      bG.addColorStop(0.15, `hsla(${hue}, 68%, 75%, 0.28)`)
+      bG.addColorStop(0.35, `hsla(${hue}, 62%, 62%, 0.30)`)
+      bG.addColorStop(0.55, `hsla(${hue}, 56%, 50%, 0.28)`)
+      bG.addColorStop(0.8, `hsla(${hue}, 50%, 40%, 0.24)`)
+      bG.addColorStop(1, `hsla(${hue}, 44%, 30%, 0.20)`)
       ctx.fillStyle = bG
       ctx.fill()
+
+      // Bright center glow (drawn inside clipped bell)
+      ctx.save()
+      traceBell(ctx, cx, cy, sx, sy, t)
+      ctx.clip()
+      const coreG = ctx.createRadialGradient(cx, cy - 3, 0, cx, cy - 3, BELL_H * 0.65)
+      coreG.addColorStop(0, `hsla(${hue + 10}, 78%, 95%, ${0.40 + pulse * 0.12})`)
+      coreG.addColorStop(0.3, `hsla(${hue + 5}, 70%, 82%, 0.22)`)
+      coreG.addColorStop(0.6, `hsla(${hue}, 60%, 65%, 0.08)`)
+      coreG.addColorStop(1, `hsla(${hue}, 50%, 50%, 0)`)
+      ctx.fillStyle = coreG
+      ctx.fillRect(cx - BELL_W - 5, cy - BELL_H - 5, (BELL_W + 5) * 2, (BELL_H + 5) * 2)
+      ctx.restore()
 
       // ══════════════════════════════════════════════════════════════
       // LAYER 4 — Inner glow + organs (clipped to bell)
@@ -288,9 +436,9 @@ export function BlobCanvas() {
 
       // Inner radial glow
       const iG = ctx.createRadialGradient(cx, cy - 2, 0, cx, cy, BELL_H * 0.8)
-      iG.addColorStop(0, `hsla(${hue}, 68%, 75%, ${0.12 + (pulse + 1) * 0.04})`)
-      iG.addColorStop(0.5, `hsla(${hue}, 58%, 60%, ${0.05})`)
-      iG.addColorStop(1, `hsla(${hue}, 48%, 45%, 0)`)
+      iG.addColorStop(0, `hsla(${hue}, 72%, 80%, ${0.18 + (pulse + 1) * 0.06})`)
+      iG.addColorStop(0.4, `hsla(${hue}, 62%, 65%, ${0.08})`)
+      iG.addColorStop(1, `hsla(${hue}, 50%, 50%, 0)`)
       ctx.fillStyle = iG
       ctx.fillRect(0, 0, w, h)
 
@@ -301,20 +449,20 @@ export function BlobCanvas() {
         const op = Math.sin(t * o.speed + o.phase) * 0.3 + 0.7
         const ob = o.bright * op * (isProcessing ? 1.5 : 1.0)
 
-        // Halo
-        const ohG = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, o.size * 2.5)
-        ohG.addColorStop(0, `hsla(${hue + 30}, 68%, 72%, ${0.10 * ob})`)
-        ohG.addColorStop(0.5, `hsla(${hue + 20}, 58%, 58%, ${0.03 * ob})`)
-        ohG.addColorStop(1, `hsla(${hue + 10}, 48%, 45%, 0)`)
+        // Halo (stronger)
+        const ohG = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, o.size * 2.8)
+        ohG.addColorStop(0, `hsla(${hue + 30}, 72%, 78%, ${0.16 * ob})`)
+        ohG.addColorStop(0.4, `hsla(${hue + 20}, 62%, 62%, ${0.06 * ob})`)
+        ohG.addColorStop(1, `hsla(${hue + 10}, 50%, 48%, 0)`)
         ctx.beginPath()
-        ctx.arc(pos.x, pos.y, o.size * 2.5, 0, Math.PI * 2)
+        ctx.arc(pos.x, pos.y, o.size * 2.8, 0, Math.PI * 2)
         ctx.fillStyle = ohG
         ctx.fill()
 
-        // Core
+        // Core (brighter)
         const oG = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, o.size)
-        oG.addColorStop(0, `hsla(${hue + 25}, 75%, 80%, ${0.35 * ob})`)
-        oG.addColorStop(0.5, `hsla(${hue + 15}, 65%, 65%, ${0.15 * ob})`)
+        oG.addColorStop(0, `hsla(${hue + 25}, 78%, 85%, ${0.45 * ob})`)
+        oG.addColorStop(0.4, `hsla(${hue + 15}, 68%, 70%, ${0.20 * ob})`)
         oG.addColorStop(1, `hsla(${hue + 5}, 55%, 50%, 0)`)
         ctx.beginPath()
         ctx.arc(pos.x, pos.y, o.size, 0, Math.PI * 2)
@@ -325,91 +473,204 @@ export function BlobCanvas() {
       ctx.restore()
 
       // ══════════════════════════════════════════════════════════════
-      // LAYER 5 — Bell membrane (edge stroke)
+      // LAYER 5 — Bell membrane (subtle edge stroke)
       // ══════════════════════════════════════════════════════════════
       traceBell(ctx, cx, cy, sx, sy, t)
       const mG = ctx.createLinearGradient(cx - BELL_W, cy - BELL_H, cx + BELL_W, cy + BELL_H * 0.5)
-      mG.addColorStop(0, `hsla(${hue}, 60%, 62%, 0.18)`)
-      mG.addColorStop(0.5, `hsla(${hue}, 55%, 52%, 0.12)`)
-      mG.addColorStop(1, `hsla(${hue}, 50%, 48%, 0.06)`)
+      mG.addColorStop(0, `hsla(${hue}, 62%, 68%, 0.12)`)
+      mG.addColorStop(0.5, `hsla(${hue}, 55%, 55%, 0.08)`)
+      mG.addColorStop(1, `hsla(${hue}, 50%, 50%, 0.04)`)
       ctx.strokeStyle = mG
-      ctx.lineWidth = 1.2
+      ctx.lineWidth = 1.0
       ctx.stroke()
 
       // ══════════════════════════════════════════════════════════════
-      // LAYER 6 — EYES (the character)
+      // LAYER 6 — EYES (full black, expressive)
       // ══════════════════════════════════════════════════════════════
       const eyeSpacing = 9
       const eyeY = cy - 2
       const eyeRadius = 5.5
-      const pupilRadius = 2.8
-      const irisRadius = 3.8
+      const eyeH = eyeRadius * (1 - squint) * (1 - blinkAmount)
+      const eyeW = eyeRadius * (isSurprised ? 1.2 : 1)
 
       for (let side = -1; side <= 1; side += 2) {
         const ex = cx + side * eyeSpacing * sx
         const ey = eyeY
 
-        // Eye white (slightly translucent)
-        const eyeG = ctx.createRadialGradient(ex, ey, 0, ex, ey, eyeRadius)
-        eyeG.addColorStop(0, `hsla(${hue + 20}, 15%, 95%, 0.85)`)
-        eyeG.addColorStop(0.7, `hsla(${hue + 10}, 20%, 90%, 0.80)`)
-        eyeG.addColorStop(1, `hsla(${hue}, 25%, 82%, 0.70)`)
-        ctx.beginPath()
-        ctx.ellipse(ex, ey, eyeRadius, eyeRadius * (1 - squint) * (1 - blinkAmount), 0, 0, Math.PI * 2)
-        ctx.fillStyle = eyeG
-        ctx.fill()
+        if (isHappyEyes) {
+          // Happy eyes: draw upward arc (^_^ style)
+          ctx.beginPath()
+          ctx.arc(ex, ey + 1, eyeRadius * 0.7, Math.PI + 0.4, -0.4)
+          ctx.strokeStyle = `hsla(0, 0%, 5%, 0.90)`
+          ctx.lineWidth = 2.2
+          ctx.lineCap = 'round'
+          ctx.stroke()
+        } else {
+          // Shift entire eye toward cursor
+          const trackX = ep.x * 1.2
+          const trackY = ep.y * 1.2
+          const pupilX = ex + trackX
+          const pupilY = ey + trackY
 
-        // Eye rim
+          // Full black eye (shifted toward cursor)
+          ctx.beginPath()
+          ctx.ellipse(pupilX, pupilY, eyeW, eyeH, 0, 0, Math.PI * 2)
+          ctx.fillStyle = `hsla(0, 0%, 3%, 0.95)`
+          ctx.fill()
+
+          // Subtle iris ring (shifted with tracking, slightly less)
+          const irisX = ex + trackX * 0.7
+          const irisY = ey + trackY * 0.7
+          const irisR = eyeW * 0.65
+          ctx.beginPath()
+          ctx.arc(irisX, irisY, irisR, 0, Math.PI * 2)
+          ctx.strokeStyle = `hsla(${hue + 20}, 30%, 18%, 0.35)`
+          ctx.lineWidth = 1.0
+          ctx.stroke()
+
+          // Specular highlight (top-right, follows eye slightly less)
+          const shX = pupilX + 2 - trackX * 0.2
+          const shY = pupilY - 2 - trackY * 0.2
+          const shG = ctx.createRadialGradient(shX, shY, 0, shX, shY, 2.2)
+          shG.addColorStop(0, `hsla(0, 0%, 100%, ${0.70 * (1 - blinkAmount)})`)
+          shG.addColorStop(0.5, `hsla(0, 0%, 100%, ${0.25 * (1 - blinkAmount)})`)
+          shG.addColorStop(1, `hsla(0, 0%, 100%, 0)`)
+          ctx.beginPath()
+          ctx.arc(shX, shY, 2.2, 0, Math.PI * 2)
+          ctx.fillStyle = shG
+          ctx.fill()
+
+          // Secondary specular (smaller, bottom-left)
+          const sh2X = pupilX - 1.5 - trackX * 0.15
+          const sh2Y = pupilY + 1.5 - trackY * 0.15
+          ctx.beginPath()
+          ctx.arc(sh2X, sh2Y, 1.0, 0, Math.PI * 2)
+          ctx.fillStyle = `hsla(0, 0%, 100%, ${0.25 * (1 - blinkAmount)})`
+          ctx.fill()
+        }
+      }
+
+      // ── Expression overlays ─────────────────────────────────────
+
+      // Annoyed eyebrows (when dragging, before dizzy)
+      if (expression === 'annoyed') {
+        const browY = eyeY - eyeH - 3.5
+        const browLen = 5
+        const browAngle = 0.35
+        ctx.lineWidth = 1.6
+        ctx.lineCap = 'round'
+        ctx.strokeStyle = `hsla(0, 0%, 10%, 0.7)`
+
+        const lbx = cx - eyeSpacing * sx
         ctx.beginPath()
-        ctx.ellipse(ex, ey, eyeRadius, eyeRadius * (1 - squint) * (1 - blinkAmount), 0, 0, Math.PI * 2)
-        ctx.strokeStyle = `hsla(${hue}, 40%, 40%, 0.25)`
-        ctx.lineWidth = 0.6
+        ctx.moveTo(lbx - browLen * Math.cos(browAngle), browY - browLen * Math.sin(browAngle))
+        ctx.lineTo(lbx + browLen * Math.cos(browAngle), browY + browLen * Math.sin(browAngle))
         ctx.stroke()
 
-        // Iris (colored, tracks movement)
-        const irisX = ex + ep.x
-        const irisY = ey + ep.y
-        const iG = ctx.createRadialGradient(irisX, irisY, 0, irisX, irisY, irisRadius)
-        iG.addColorStop(0, `hsla(${hue + 40}, 50%, 40%, 0.9)`)
-        iG.addColorStop(0.5, `hsla(${hue + 20}, 55%, 32%, 0.92)`)
-        iG.addColorStop(1, `hsla(${hue}, 60%, 22%, 0.95)`)
+        const rbx = cx + eyeSpacing * sx
         ctx.beginPath()
-        ctx.arc(irisX, irisY, irisRadius * (1 - blinkAmount * 0.8), 0, Math.PI * 2)
-        ctx.fillStyle = iG
-        ctx.fill()
+        ctx.moveTo(rbx + browLen * Math.cos(browAngle), browY - browLen * Math.sin(browAngle))
+        ctx.lineTo(rbx - browLen * Math.cos(browAngle), browY + browLen * Math.sin(browAngle))
+        ctx.stroke()
+      }
 
-        // Pupil (dark center)
-        ctx.beginPath()
-        ctx.arc(irisX, irisY, pupilRadius * (1 - blinkAmount * 0.7), 0, Math.PI * 2)
-        ctx.fillStyle = `hsla(${hue}, 30%, 8%, 0.95)`
-        ctx.fill()
+      // Dizzy: spiral eyes + orbiting stars
+      if (expression === 'dizzy') {
+        // Draw spirals over the eyes
+        for (let side = -1; side <= 1; side += 2) {
+          const ex = cx + side * eyeSpacing * sx
+          const ey = eyeY
+          ctx.save()
+          ctx.translate(ex, ey)
+          ctx.rotate(t * 4)
+          ctx.beginPath()
+          for (let s = 0; s < 20; s++) {
+            const sa = (s / 20) * Math.PI * 4
+            const sr = (s / 20) * 3.5
+            const sx2 = Math.cos(sa) * sr
+            const sy2 = Math.sin(sa) * sr
+            if (s === 0) ctx.moveTo(sx2, sy2)
+            else ctx.lineTo(sx2, sy2)
+          }
+          ctx.strokeStyle = `hsla(0, 0%, 95%, 0.7)`
+          ctx.lineWidth = 1.2
+          ctx.stroke()
+          ctx.restore()
+        }
 
-        // Pupil dilation (processing = smaller, idle = larger)
-        const pupilDilated = isProcessing ? 0.7 : 1.0
-        ctx.beginPath()
-        ctx.arc(irisX, irisY, pupilRadius * pupilDilated * (1 - blinkAmount * 0.7), 0, Math.PI * 2)
-        ctx.fillStyle = `hsla(0, 0%, 5%, 0.98)`
-        ctx.fill()
+        // Orbiting stars
+        for (const star of dizzyStars) {
+          const starX = cx + Math.cos(star.angle) * star.dist * sx
+          const starY = cy - 6 + Math.sin(star.angle) * star.dist * 0.4
+          const starSize = 1.5 + Math.sin(t * 8 + star.angle) * 0.5
+          ctx.fillStyle = `hsla(50, 90%, 75%, 0.8)`
+          // Draw 4-point star
+          ctx.beginPath()
+          for (let p = 0; p < 4; p++) {
+            const pa = (p / 4) * Math.PI * 2 - Math.PI / 2
+            const outerX = starX + Math.cos(pa) * starSize
+            const outerY = starY + Math.sin(pa) * starSize
+            const innerPa = pa + Math.PI / 4
+            const innerX = starX + Math.cos(innerPa) * starSize * 0.3
+            const innerY = starY + Math.sin(innerPa) * starSize * 0.3
+            if (p === 0) ctx.moveTo(outerX, outerY)
+            else ctx.lineTo(outerX, outerY)
+            ctx.lineTo(innerX, innerY)
+          }
+          ctx.closePath()
+          ctx.fill()
+        }
+      }
 
-        // Specular highlight (top-right of eye)
-        const shX = ex + 2 + ep.x * 0.3
-        const shY = ey - 2 + ep.y * 0.3
-        const shG = ctx.createRadialGradient(shX, shY, 0, shX, shY, 2.2)
-        shG.addColorStop(0, `hsla(0, 0%, 100%, ${0.75 * (1 - blinkAmount)})`)
-        shG.addColorStop(0.5, `hsla(0, 0%, 100%, ${0.30 * (1 - blinkAmount)})`)
-        shG.addColorStop(1, `hsla(0, 0%, 100%, 0)`)
-        ctx.beginPath()
-        ctx.arc(shX, shY, 2.2, 0, Math.PI * 2)
-        ctx.fillStyle = shG
-        ctx.fill()
+      // Sleepy: droopy eyes + floating zzz
+      if (expression === 'sleepy') {
+        // Draw half-lidded overlay (droopy top eyelid)
+        for (let side = -1; side <= 1; side += 2) {
+          const ex = cx + side * eyeSpacing * sx
+          const ey = eyeY
+          ctx.save()
+          ctx.beginPath()
+          ctx.ellipse(ex, ey - eyeH * 0.3, eyeRadius + 1, eyeH * 0.6, 0, 0, Math.PI)
+          ctx.fillStyle = `hsla(0, 0%, 3%, 0.5)`
+          ctx.fill()
+          ctx.restore()
+        }
 
-        // Secondary specular (smaller, bottom-left)
-        const sh2X = ex - 1.5 + ep.x * 0.2
-        const sh2Y = ey + 1.5 + ep.y * 0.2
+        // Floating zzz
+        const zzz = ['z', 'Z', 'z']
+        for (let i = 0; i < 3; i++) {
+          const zt = (t * 0.8 + i * 0.7) % 3
+          const zx = cx + 16 + i * 4 + Math.sin(zt * 2) * 2
+          const zy = cy - 10 - zt * 8
+          const za = Math.max(0, 1 - zt / 3)
+          const zSize = 5 + i * 1.5
+          ctx.font = `bold ${zSize}px sans-serif`
+          ctx.fillStyle = `hsla(${hue}, 40%, 80%, ${za * 0.6})`
+          ctx.fillText(zzz[i], zx, zy)
+        }
+      }
+
+      // Surprised: small "o" mouth
+      if (expression === 'surprised') {
         ctx.beginPath()
-        ctx.arc(sh2X, sh2Y, 1.0, 0, Math.PI * 2)
-        ctx.fillStyle = `hsla(0, 0%, 100%, ${0.30 * (1 - blinkAmount)})`
+        ctx.arc(cx, cy + 8, 2.5, 0, Math.PI * 2)
+        ctx.fillStyle = `hsla(0, 0%, 5%, 0.6)`
         ctx.fill()
+      }
+
+      // Shy: slight blush marks
+      if (expression === 'shy') {
+        for (let side = -1; side <= 1; side += 2) {
+          const bx = cx + side * (eyeSpacing + 5) * sx
+          const by = eyeY + 4
+          const blushG = ctx.createRadialGradient(bx, by, 0, bx, by, 4)
+          blushG.addColorStop(0, `hsla(${hue + 340}, 60%, 60%, 0.25)`)
+          blushG.addColorStop(1, `hsla(${hue + 340}, 50%, 55%, 0)`)
+          ctx.beginPath()
+          ctx.arc(bx, by, 4, 0, Math.PI * 2)
+          ctx.fillStyle = blushG
+          ctx.fill()
+        }
       }
 
       // ══════════════════════════════════════════════════════════════
@@ -417,12 +678,13 @@ export function BlobCanvas() {
       // ══════════════════════════════════════════════════════════════
       const spX = cx - 8
       const spY = cy - BELL_H * 0.55
-      const spG = ctx.createRadialGradient(spX, spY, 0, spX, spY, 8)
-      spG.addColorStop(0, `hsla(${hue}, 30%, 95%, 0.40)`)
-      spG.addColorStop(0.4, `hsla(${hue}, 40%, 88%, 0.15)`)
+      const spG = ctx.createRadialGradient(spX, spY, 0, spX, spY, 9)
+      spG.addColorStop(0, `hsla(${hue}, 30%, 98%, 0.50)`)
+      spG.addColorStop(0.3, `hsla(${hue}, 40%, 92%, 0.22)`)
+      spG.addColorStop(0.6, `hsla(${hue}, 45%, 85%, 0.08)`)
       spG.addColorStop(1, `hsla(${hue}, 50%, 80%, 0)`)
       ctx.beginPath()
-      ctx.ellipse(spX, spY, 8, 4, -0.2, 0, Math.PI * 2)
+      ctx.ellipse(spX, spY, 9, 4.5, -0.2, 0, Math.PI * 2)
       ctx.fillStyle = spG
       ctx.fill()
 
@@ -454,7 +716,7 @@ export function BlobCanvas() {
     raf = requestAnimationFrame(draw)
     return () => {
       cancelAnimationFrame(raf)
-      window.removeEventListener('mousemove', onMouseMove)
+      clearInterval(cursorInterval)
     }
   }, [isProcessing, isDragging])
 
@@ -469,7 +731,6 @@ export function BlobCanvas() {
     didDragRef.current = false
     startScreenRef.current = { x: e.screenX, y: e.screenY }
 
-    getScreenSize().then((s) => { screenSizeRef.current = s }).catch(() => {})
     getWindowPosition().then((wp) => {
       startWindowRef.current = wp
       setBlobScreenPos({ x: wp.x + 45, y: wp.y + 60 })
@@ -489,11 +750,13 @@ export function BlobCanvas() {
       const ny = startWindowRef.current.y + dy
       setWindowPosition(nx, ny).catch(() => {})
       setBlobScreenPos({ x: nx + 45, y: ny + 60 })
+
       if (useConfigStore.getState().textboxOpen) {
-        const sc = screenSizeRef.current || { width: 1920, height: 1080 }
-        let chatX = Math.max(0, Math.min(nx + 45 - CHAT_W * 0.5, sc.width - CHAT_W))
-        let chatY = Math.max(0, Math.min(ny + BLOB.SIZE + 10, sc.height - CHAT_H_EXPANDED))
-        setChatWindowPosition(chatX, chatY).catch(() => {})
+        getScreenInfo().then((sc) => {
+          let chatX = Math.max(sc.x, Math.min(nx + 45 - CHAT_W * 0.5, sc.x + sc.width - CHAT_W))
+          let chatY = Math.max(sc.y, Math.min(ny + BLOB.SIZE + 10, sc.y + sc.height - CHAT_H_EXPANDED))
+          setChatWindowPosition(chatX, chatY).catch(() => {})
+        }).catch(() => {})
       }
     }
 
@@ -509,9 +772,9 @@ export function BlobCanvas() {
           setTextboxOpen(false)
           hideChatWindow().catch(() => {})
         } else {
-          Promise.all([getWindowPosition(), getScreenSize()]).then(([wp, sc]) => {
-            let chatX = Math.max(0, Math.min(wp.x + 45 - CHAT_W * 0.5, sc.width - CHAT_W))
-            let chatY = Math.max(0, Math.min(wp.y + BLOB.SIZE + 10, sc.height - CHAT_H_COLLAPSED))
+          Promise.all([getWindowPosition(), getScreenInfo()]).then(([wp, sc]) => {
+            let chatX = Math.max(sc.x, Math.min(wp.x + 45 - CHAT_W * 0.5, sc.x + sc.width - CHAT_W))
+            let chatY = Math.max(sc.y, Math.min(wp.y + BLOB.SIZE + 10, sc.y + sc.height - CHAT_H_COLLAPSED))
             setBlobScreenPos({ x: wp.x + 45, y: wp.y + BLOB.SIZE - 60 })
             setTextboxOpen(true)
             showChatWindow(chatX, chatY).catch(() => {})
@@ -523,7 +786,6 @@ export function BlobCanvas() {
       didDragRef.current = false
       startScreenRef.current = null
       startWindowRef.current = null
-      screenSizeRef.current = null
       setIsDragging(false)
     }
 

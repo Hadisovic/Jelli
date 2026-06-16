@@ -122,8 +122,18 @@ export async function getScreenSize(): Promise<{ width: number; height: number }
   return { width, height }
 }
 
+export async function getScreenInfo(): Promise<{ x: number; y: number; width: number; height: number }> {
+  const [[x, y], [width, height]] = await invoke<[[number, number], [number, number]]>('get_screen_info')
+  return { x, y, width, height }
+}
+
 export async function showChatWindow(x: number, y: number): Promise<void> {
   await invoke('show_chat_window', { x, y })
+}
+
+export async function getCursorPosition(): Promise<{ x: number; y: number }> {
+  const [x, y] = await invoke<[number, number]>('get_cursor_position')
+  return { x, y }
 }
 
 export async function hideChatWindow(): Promise<void> {
