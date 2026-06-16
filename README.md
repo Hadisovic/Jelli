@@ -8,7 +8,7 @@
 
   <p>
     <img src="https://img.shields.io/badge/Status-In_Development-blueviolet?style=for-the-badge&logo=github" alt="Status" />
-    <img src="https://img.shields.io/badge/Powered_by-Dia_2_%26_Claude-orange?style=for-the-badge" alt="Powered By" />
+    <img src="https://img.shields.io/badge/Powered_by-Dia_2-orange?style=for-the-badge" alt="Powered By" />
     <img src="https://img.shields.io/badge/Platform-Tauri_v2-lightgrey?style=for-the-badge&logo=rust" alt="Platform" />
   </p>
 </div>
@@ -30,6 +30,22 @@ Built for speed and responsiveness, zAIn utilizes the [Dia 2](https://github.com
 - 💬 **iMessage-Style UI**: Sleek, glassmorphic floating chat bubble with smooth spring animations and responsive text expansion.
 - 🎙️ **Low-Latency Voice**: Real-time voice generation using **Dia 2** with streaming PCM chunk audio over Tauri IPC.
 - 🧠 **Multi-Provider LLM Proxy**: Deep integration with Ollama, OpenAI, Anthropic, Gemini, and DeepSeek, including instant cancellation.
+
+---
+
+## 🔮 Blob States & Expressions
+
+Experience a dynamic desktop companion that morphs organically based on your interactions:
+
+| **Idle (Normal)** | **Shy (Cursor Hover)** | **Happy (Petting)** |
+| :---: | :---: | :---: |
+| <img src="docs/images/normal_mode.png" width="160" alt="Normal Mode" /> | <img src="docs/images/cursor_close.png" width="160" alt="Cursor Close" /> | <img src="docs/images/happy_patting.png" width="160" alt="Happy Mode" /> |
+| Baseline calm state with gentle breathing and cycling gradients | Blushes and tracks the mouse cursor system-wide | Warm green/yellow glow with cute crescent-smile eyes |
+
+| **Dizzy (Dragging)** | **Rage (Angry)** |
+| :---: | :---: |
+| <img src="docs/images/dizzy.png" width="160" alt="Dizzy Mode" /> | <img src="docs/images/angry.png" width="160" alt="Angry Mode" /> |
+| Erratic physics and spinning stars orbit the blob post-drag | Intense crimson-red body with an animated anger vein 💢 |
 
 ---
 
