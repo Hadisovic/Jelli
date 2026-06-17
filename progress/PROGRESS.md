@@ -1,6 +1,6 @@
 # Jelli Companion — Complete Progress
 
-**Last Updated:** 2026-06-17
+**Last Updated:** 2026-06-18
 **Status:** Active development
 **Branch:** `master`
 
@@ -26,6 +26,7 @@
 16. [Notes](#16-notes)
 17. [Recent Updates (June 16, 2026)](#17-recent-updates-june-16-2026)
 18. [Recent Updates (June 17, 2026)](#18-recent-updates-june-17-2026)
+19. [Recent Updates (June 18, 2026)](#19-recent-updates-june-18-2026)
 
 ---
 
@@ -858,6 +859,27 @@ cd csm && pip install -e .
 - **Attentive Chat Mode (Active Blob Expression)**:
   - Subscribed [BlobCanvas.tsx](file:///d:/Jelli/jelli-companion/src/components/BlobCanvas.tsx) to `textboxOpen` state from the config store.
   - Updated the expression state machine to lock Jelli in the yellow "typing" (attentive curious) mode whenever the chat window is actively open, preventing the blob from falling asleep (`sleepy`) or entering standard idles (`idle`, `shy`) during active chat sessions.
+
+---
+
+## 19. Recent Updates (June 18, 2026)
+
+### 1. Personality Delivery Fix
+- **Problem:**
+  - Jelli was responding formally ("I am doing well, thank you for asking.") instead of in character. Root causes:
+    1. **Cross-window expression sync missing** — Blob expressions didn't reach chat windows, so mood suffixes never applied when chatting via floating window.
+    2. **Ollama persona injection targeted first user message** — By turn 2+, the system prompt was buried and ignored.
+    3. **Few-shot examples buried in system prompt** — Small Ollama models underweight system blocks vs. actual conversation history.
+    4. **Thinking messages sent to LLM** — ChatTextbox included internal thinking messages in context, confusing the model.
+    5. **Mood suffixes contradicted base rules** — e.g., happy mood said "use exclamation marks, caps" conflicting with "lowercase only".
+- **Fixes Implemented:**
+  - **Cross-Window Expression Sync:** Added `emitExpressionChanged(expression)` / `onExpressionChanged(handler)` Tauri IPC events in [api.ts](file:///d:/Jelli/jelli-companion/src/lib/api.ts). [BlobCanvas.tsx](file:///d:/Jelli/jelli-companion/src/components/BlobCanvas.tsx) emits them on expression change. [ChatTextbox.tsx](file:///d:/Jelli/jelli-companion/src/components/ChatTextbox.tsx) and [ChatInput.tsx](file:///d:/Jelli/jelli-companion/src/components/ChatInput.tsx) listen for them to update local stores.
+  - **Ollama Persona Injection Fix:** Changed `.find()` to `.rev().find()` in `stream_ollama` in [llm.rs](file:///d:/Jelli/jelli-companion/src-tauri/src/llm.rs) targeting the last user message instead of the first. Turn 1 gets full system prompt, Turn 2+ gets a short 1-line reminder: "stay in character as jelli — lowercase, 1 sentence, emojis, gen z texting, no periods, be casual and brief".
+  - **Few-Shot Extraction:** Extracted 6 example pairs into `FEW_SHOT_MESSAGES` array in [system-prompt.ts](file:///d:/Jelli/jelli-companion/src/lib/system-prompt.ts). `sendChatMessage` in [api.ts](file:///d:/Jelli/jelli-companion/src/lib/api.ts) prepends `FEW_SHOT_MESSAGES` to the message array.
+  - **Thinking Message Filter:** Filtered out messages with `status === 'thinking'` in [ChatTextbox.tsx](file:///d:/Jelli/jelli-companion/src/components/ChatTextbox.tsx) before sending messages to the LLM.
+  - **Mood Suffix Rewrite:** Rewrote `MOOD_SUFFIXES` in [system-prompt.ts](file:///d:/Jelli/jelli-companion/src/lib/system-prompt.ts) to be tone modifiers only, respecting the base rules (lowercase, brief, no periods).
+  - **BASE_PROMPT Tightened:** Reduced `BASE_PROMPT` in [system-prompt.ts](file:///d:/Jelli/jelli-companion/src/lib/system-prompt.ts) to 6 lines, front-loading critical rules.
+  - **Parse Error Fix:** Replaced smart quotes with ASCII apostrophes in string literals in [system-prompt.ts](file:///d:/Jelli/jelli-companion/src/lib/system-prompt.ts) to avoid esbuild parsing issues.
 
 ---
 
