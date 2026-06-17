@@ -235,6 +235,11 @@ export function ChatTextbox() {
       return
     }
 
+    if (text === '/clear') {
+      useChatStore.getState().clearMessages()
+      return
+    }
+
     setSendFlash(true)
     setTimeout(() => setSendFlash(false), 600)
 

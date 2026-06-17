@@ -35,6 +35,11 @@ export function ChatInput() {
       return
     }
 
+    if (text === '/clear') {
+      useChatStore.getState().clearMessages()
+      return
+    }
+
     addMessage({ text, role: 'user', status: 'sent' })
 
     setProcessing(true)
