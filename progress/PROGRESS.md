@@ -844,15 +844,19 @@ cd csm && pip install -e .
   - Configured the dynamic `measure` effect inside [ChatTextbox.tsx](file:///d:/Jelli/jelli-companion/src/components/ChatTextbox.tsx) to automatically resize the Tauri OS window to accommodate the dropdown height when visible.
   - Fully supports keyboard arrow navigation (`ArrowUp`/`ArrowDown`), confirmation selection (`Enter`), and quick dismissal (`Escape`).
 
-### 6. Gemini System Prompt & Persona Bug Fix
-- **System Instruction Mapping:**
+### 6. System Prompt & Persona Adherence Fixes
+- **Gemini System Instruction Mapping:**
   - Patched `stream_gemini` in [llm.rs](file:///d:/Jelli/jelli-companion/src-tauri/src/llm.rs) to extract system prompt messages from the message history and properly pass them using the native `systemInstruction` field in the Gemini API body.
-  - This prevents the prompt from being sent as a regular user message (which was violating the Gemini role alternation rule and causing the model to ignore formatting guidelines like lowercase-only texting).
+  - This prevents the prompt from being sent as a regular user message (which was violating the Gemini role alternation rule and causing the model to ignore formatting guidelines).
+- **Ollama System Prompt Fallback Injection:**
+  - Patched `stream_ollama` in [llm.rs](file:///d:/Jelli/jelli-companion/src-tauri/src/llm.rs) to dynamically prepend system instruction blocks to the very first user message of the conversation context.
+  - This acts as a robust fallback for local models whose Modelfiles/chat templates completely ignore or strip out the `"system"` role in the messages payload, guaranteeing the local model always reads the persona rules.
 
 ---
 
 **Status:** Active development
 **Quality:** Production-grade code, fully polished expressions, colors, and transitions
 **Documentation:** This file is the single source of truth for all project progress
+
 
 

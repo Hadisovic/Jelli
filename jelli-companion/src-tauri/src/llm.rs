@@ -113,9 +113,24 @@ async fn stream_ollama(
     cancel: &CancelMap,
 ) -> Result<String, String> {
     let base = config.api_url.as_deref().unwrap_or(default_url("ollama"));
+
+    // Fallback: Prepend system prompt to the first user message.
+    // Some local model Modelfiles/templates completely ignore or omit the "system" role.
+    let mut final_messages = messages.to_vec();
+    if let Some(sys_msg) = messages.iter().find(|m| m.role == "system") {
+        let sys_content = sys_msg.content.clone();
+        if let Some(first_user) = final_messages.iter_mut().find(|m| m.role == "user") {
+            first_user.content = format!(
+                "SYSTEM INSTRUCTIONS (ACT LIKE THIS): {}\n\nUSER MESSAGE: {}",
+                sys_content,
+                first_user.content
+            );
+        }
+    }
+
     let body = serde_json::json!({
         "model": config.model,
-        "messages": messages,
+        "messages": final_messages,
         "stream": true,
         "options": {
             "temperature": config.temperature.unwrap_or(0.7),
