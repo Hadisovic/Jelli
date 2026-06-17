@@ -1,9 +1,12 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import { useConfigStore } from '@/stores/config'
 import { useChatStore } from '@/stores/chat'
-import { sendChatMessage, hideChatWindow, resizeWindow } from '@/lib/api'
+import { sendChatMessage, hideChatWindow, resizeWindow, emitUserTyping, emitUserIdle, getScreenSize } from '@/lib/api'
 
-const CHAT_H_EXPANDED = 250
+const CHAT_INPUT_HEIGHT = 56  // input row + padding
+const CHAT_MIN_H = 56        // just the input row
+const CHAT_MAX_H = 320       // never exceed this
+const CHAT_PADDING = 16      // panel padding (8px top + 8px bottom)
 
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -30,7 +33,9 @@ export function ChatTextbox() {
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const responseRef = useRef<HTMLDivElement>(null)
   const [sendFlash, setSendFlash] = useState(false)
+  const prevContentLenRef = useRef(0)
 
   useEffect(() => {
     requestAnimationFrame(() => {
@@ -38,9 +43,43 @@ export function ChatTextbox() {
     })
   }, [])
 
+  // Dynamic resize: measure response content and resize window to fit
+  useEffect(() => {
+    const measure = async () => {
+      // Wait for DOM to settle
+      await new Promise((r) => requestAnimationFrame(r))
+      await new Promise((r) => requestAnimationFrame(r))
+
+      const panel = panelRef.current
+      if (!panel) return
+
+      const panelRect = panel.getBoundingClientRect()
+      const panelH = panelRect.height
+
+      // Target height = panel content height + some buffer for border radius
+      const targetH = Math.max(CHAT_MIN_H, Math.min(CHAT_MAX_H, Math.ceil(panelH) + 4))
+
+      // Get current window size to avoid unnecessary resizes
+      try {
+        const screen = await getScreenSize()
+        const maxAllowed = Math.min(CHAT_MAX_H, Math.floor(screen.height * 0.4))
+        const clampedH = Math.min(targetH, maxAllowed)
+        resizeWindow(360, clampedH).catch(() => {})
+      } catch {
+        resizeWindow(360, targetH).catch(() => {})
+      }
+    }
+
+    measure()
+  }, [lastAssistant?.text, isProcessing, isPlayingAudio])
+
   useEffect(() => {
     if (isProcessing) {
-      resizeWindow(360, CHAT_H_EXPANDED).catch(() => {})
+      // Focus stays disabled during processing
+    } else {
+      requestAnimationFrame(() => {
+        inputRef.current?.focus()
+      })
     }
   }, [isProcessing])
 
@@ -82,6 +121,42 @@ export function ChatTextbox() {
     }
   }, [])
 
+  // Typing detection: emit events so the blob can show yellow curiosity state
+  const wasTypingRef = useRef(false)
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+
+    const checkAndEmit = () => {
+      const hasText = (el.value ?? '').trim().length > 0
+      if (hasText && !wasTypingRef.current) {
+        wasTypingRef.current = true
+        emitUserTyping()
+      } else if (!hasText && wasTypingRef.current) {
+        wasTypingRef.current = false
+        emitUserIdle()
+      }
+    }
+
+    const onFocus = () => checkAndEmit()
+    const onBlur = () => {
+      if (wasTypingRef.current) {
+        wasTypingRef.current = false
+        emitUserIdle()
+      }
+    }
+    const onInput = () => checkAndEmit()
+
+    el.addEventListener('focus', onFocus)
+    el.addEventListener('blur', onBlur)
+    el.addEventListener('input', onInput)
+    return () => {
+      el.removeEventListener('focus', onFocus)
+      el.removeEventListener('blur', onBlur)
+      el.removeEventListener('input', onInput)
+    }
+  }, [])
+
   const handleSend = useCallback(async () => {
     const text = inputRef.current?.value.trim()
     if (!text || isProcessing) return
@@ -100,16 +175,23 @@ export function ChatTextbox() {
     if (inputRef.current) {
       inputRef.current.value = ''
     }
+    // Clear typing state
+    if (wasTypingRef.current) {
+      wasTypingRef.current = false
+      emitUserIdle()
+    }
     setProcessing(true)
 
     try {
       const requestId = generateUUID()
       registerRequest(requestId, assistantMsgId)
 
-      const messages = useChatStore.getState().messages.map((m) => ({
+      const allMessages = useChatStore.getState().messages.map((m) => ({
         role: m.role,
         content: m.text,
       }))
+      const ctxLimit = config.contextMessages * 2
+      const messages = ctxLimit > 0 ? allMessages.slice(-ctxLimit) : allMessages
 
       await sendChatMessage(requestId, messages, {
         provider: config.llmProvider,
@@ -120,7 +202,9 @@ export function ChatTextbox() {
         max_tokens: config.maxTokens,
         speaker_id: config.speakerId,
         quantization: config.quantization,
-      })
+        repeat_penalty: config.repeatPenalty,
+        frequency_penalty: config.frequencyPenalty,
+      }, config.currentExpression)
     } catch (e) {
       console.error('[ChatTextbox] Failed to send message:', e)
       useChatStore.getState().updateMessage(assistantMsgId, {
@@ -154,7 +238,7 @@ export function ChatTextbox() {
     >
       <div ref={panelRef} className={`chat-panel${sendFlash ? ' sending' : ''}`}>
         {lastAssistant?.text && (
-          <div className="chat-response">
+          <div ref={responseRef} className="chat-response">
             <div className="flex items-start gap-2">
               <div className="flex-1 min-w-0">
                 {lastAssistant.text}

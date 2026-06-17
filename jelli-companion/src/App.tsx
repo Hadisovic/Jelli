@@ -4,7 +4,7 @@ import { ChatWidget } from '@/components/ChatWidget'
 import { ChatTextbox } from '@/components/ChatTextbox'
 import { useConfigStore } from '@/stores/config'
 import { useChatStore } from '@/stores/chat'
-import { startSidecar, stopSidecar, onLlmToken, onLlmDone, onLlmError, onAudioChunk, onAudioDone, onSidecarStatus, hideChatWindow, getWindowLabel } from '@/lib/api'
+import { startSidecar, stopSidecar, onLlmToken, onLlmDone, onLlmError, onAudioChunk, onAudioDone, onSidecarStatus, hideChatWindow, getWindowLabel, loadSettings } from '@/lib/api'
 import { audioPlayer } from '@/lib/audio'
 
 const isDev = import.meta.env.DEV
@@ -15,6 +15,16 @@ function App() {
   useEffect(() => {
     getWindowLabel().then(setWindowLabel).catch(() => {})
   }, [])
+
+  // Load persisted settings on startup
+  useEffect(() => {
+    loadSettings().then((data) => {
+      useConfigStore.getState().loadSettings(data as Record<string, unknown>)
+    }).catch(() => {})
+  }, [])
+
+  // Apply blob opacity to canvas
+  const blobOpacity = useConfigStore((s) => s.blobOpacity)
 
   useEffect(() => {
     if (!isDev) {
@@ -99,6 +109,7 @@ function App() {
       if (msgId) {
         useChatStore.getState().updateMessage(msgId, { status: 'done' })
       }
+      useChatStore.getState().setProcessing(false)
     }).then((unlisten) => unlisteners.push(unlisten))
 
     onLlmError(({ request_id, message }) => {
@@ -136,7 +147,9 @@ function App() {
 
   return (
     <>
-      <BlobCanvas />
+      <div style={{ opacity: blobOpacity }}>
+        <BlobCanvas />
+      </div>
       <ChatWidget />
     </>
   )

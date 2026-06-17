@@ -152,7 +152,6 @@ canvas, img, svg {
 
 /* ── Chat response area ────────────────────────────────────────────────── */
 .chat-response {
-  max-height: 200px;
   overflow-y: auto;
   font-family: 'Outfit', sans-serif;
   font-size: 13px;

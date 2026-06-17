@@ -1,7 +1,7 @@
 import { useRef, useCallback, useEffect } from 'react'
 import { useChatStore } from '@/stores/chat'
 import { useConfigStore } from '@/stores/config'
-import { sendChatMessage, generateRequestId } from '@/lib/api'
+import { sendChatMessage, generateRequestId, emitUserTyping, emitUserIdle } from '@/lib/api'
 
 export function ChatInput() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -37,11 +37,12 @@ export function ChatInput() {
     const requestId = generateRequestId()
     registerRequest(requestId, thinkingId)
 
-    const messages = [
-      ...useChatStore.getState().messages
-        .filter((m) => m.status !== 'thinking')
-        .map((m) => ({ role: m.role, content: m.text })),
-    ]
+    const allMessages = useChatStore.getState().messages
+      .filter((m) => m.status !== 'thinking')
+      .map((m) => ({ role: m.role, content: m.text }))
+    // Limit context: keep only the last N message pairs (user + assistant)
+    const ctxLimit = config.contextMessages * 2
+    const messages = ctxLimit > 0 ? allMessages.slice(-ctxLimit) : allMessages
 
     try {
       await sendChatMessage(requestId, messages, {
@@ -53,7 +54,9 @@ export function ChatInput() {
         max_tokens: config.maxTokens,
         speaker_id: config.speakerId,
         quantization: config.quantization,
-      })
+        repeat_penalty: config.repeatPenalty,
+        frequency_penalty: config.frequencyPenalty,
+      }, config.currentExpression)
     } catch (err) {
       useChatStore.getState().updateMessage(thinkingId, {
         text: `Error: ${err}`,
@@ -80,6 +83,42 @@ export function ChatInput() {
       textareaRef.current.focus()
     }
   }, [isProcessing])
+
+  // Typing detection: emit events so the blob can show yellow curiosity state
+  const wasTypingRef = useRef(false)
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+
+    const checkAndEmit = () => {
+      const hasText = (el.value ?? '').trim().length > 0
+      if (hasText && !wasTypingRef.current) {
+        wasTypingRef.current = true
+        emitUserTyping()
+      } else if (!hasText && wasTypingRef.current) {
+        wasTypingRef.current = false
+        emitUserIdle()
+      }
+    }
+
+    const onFocus = () => checkAndEmit()
+    const onBlur = () => {
+      if (wasTypingRef.current) {
+        wasTypingRef.current = false
+        emitUserIdle()
+      }
+    }
+    const onInputHandler = () => checkAndEmit()
+
+    el.addEventListener('focus', onFocus)
+    el.addEventListener('blur', onBlur)
+    el.addEventListener('input', onInputHandler)
+    return () => {
+      el.removeEventListener('focus', onFocus)
+      el.removeEventListener('blur', onBlur)
+      el.removeEventListener('input', onInputHandler)
+    }
+  }, [])
 
   return (
     <div className="glass-panel rounded-xl overflow-hidden">

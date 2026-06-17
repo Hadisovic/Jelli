@@ -7,6 +7,8 @@ use std::sync::{Arc, Mutex};
 use tauri::Emitter;
 use tauri::Manager;
 
+const SETTINGS_FILE: &str = "settings.json";
+
 struct AppState {
     cancel_map: CancelMap,
     sidecar: Arc<SidecarProcess>,
@@ -202,6 +204,38 @@ fn get_cursor_position(window: tauri::Window) -> Result<(f64, f64), String> {
     }
 }
 
+// ── Settings persistence ─────────────────────────────────────────────────────
+
+#[tauri::command]
+fn save_settings(app: tauri::AppHandle, settings: serde_json::Value) -> Result<(), String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("app_data_dir: {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create_dir_all: {e}"))?;
+    let path = dir.join(SETTINGS_FILE);
+    let json =
+        serde_json::to_string_pretty(&settings).map_err(|e| format!("serialize settings: {e}"))?;
+    std::fs::write(&path, json).map_err(|e| format!("write settings: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn load_settings(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("app_data_dir: {e}"))?;
+    let path = dir.join(SETTINGS_FILE);
+    if !path.exists() {
+        return Ok(serde_json::json!({}));
+    }
+    let data = std::fs::read_to_string(&path).map_err(|e| format!("read settings: {e}"))?;
+    let val: serde_json::Value =
+        serde_json::from_str(&data).map_err(|e| format!("parse settings: {e}"))?;
+    Ok(val)
+}
+
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -268,6 +302,8 @@ pub fn run() {
             send_chat_message,
             stop_generation,
             send_tts,
+            save_settings,
+            load_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

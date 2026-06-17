@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { listen, emit, type UnlistenFn } from '@tauri-apps/api/event'
+import { getSystemPrompt } from './system-prompt'
+import type { BlobExpression } from '@/stores/config'
 
 export interface ChatMessage {
   role: string
@@ -15,6 +17,8 @@ export interface ProviderConfig {
   max_tokens?: number
   speaker_id?: number
   quantization?: string
+  repeat_penalty?: number
+  frequency_penalty?: number
 }
 
 export interface LlmTokenPayload {
@@ -59,10 +63,13 @@ export async function sendChatMessage(
   requestId: string,
   messages: ChatMessage[],
   config: ProviderConfig,
+  expression?: BlobExpression,
 ): Promise<void> {
+  const systemMsg: ChatMessage = { role: 'system', content: getSystemPrompt(expression) }
+  const augmented = [systemMsg, ...messages]
   await invoke('send_chat_message', {
     requestId,
-    messages,
+    messages: augmented,
     config: {
       provider: config.provider,
       model: config.model,
@@ -72,6 +79,8 @@ export async function sendChatMessage(
       max_tokens: config.max_tokens ?? null,
       speaker_id: config.speaker_id ?? null,
       quantization: config.quantization ?? null,
+      repeat_penalty: config.repeat_penalty ?? null,
+      frequency_penalty: config.frequency_penalty ?? null,
     },
   })
 }
@@ -148,6 +157,16 @@ export async function getWindowLabel(): Promise<string> {
   return await invoke<string>('get_window_label')
 }
 
+// ── Settings Persistence ─────────────────────────────────────────────────────
+
+export async function saveSettings(settings: Record<string, unknown>): Promise<void> {
+  await invoke('save_settings', { settings })
+}
+
+export async function loadSettings(): Promise<Record<string, unknown>> {
+  return await invoke<Record<string, unknown>>('load_settings')
+}
+
 // ── Event Listeners ─────────────────────────────────────────────────────────
 
 export function onLlmToken(handler: EventHandler<LlmTokenPayload>): Promise<UnlistenFn> {
@@ -172,4 +191,22 @@ export function onAudioDone(handler: EventHandler<AudioDonePayload>): Promise<Un
 
 export function onSidecarStatus(handler: EventHandler<SidecarStatusPayload>): Promise<UnlistenFn> {
   return listen<SidecarStatusPayload>('sidecar:status', (e) => handler(e.payload))
+}
+
+// ── User Typing Events ──────────────────────────────────────────────────────
+
+export function emitUserTyping(): Promise<void> {
+  return emit('user:typing')
+}
+
+export function emitUserIdle(): Promise<void> {
+  return emit('user:idle')
+}
+
+export function onUserTyping(handler: () => void): Promise<UnlistenFn> {
+  return listen('user:typing', () => handler())
+}
+
+export function onUserIdle(handler: () => void): Promise<UnlistenFn> {
+  return listen('user:idle', () => handler())
 }

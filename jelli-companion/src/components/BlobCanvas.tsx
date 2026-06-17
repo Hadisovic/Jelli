@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useConfigStore } from '@/stores/config'
 import { useChatStore } from '@/stores/chat'
 import { BLOB } from '@/lib/constants'
-import { getWindowPosition, setWindowPosition, showChatWindow, hideChatWindow, getScreenInfo, setChatWindowPosition, getCursorPosition } from '@/lib/api'
+import { getWindowPosition, setWindowPosition, showChatWindow, hideChatWindow, getScreenInfo, setChatWindowPosition, getCursorPosition, onUserTyping, onUserIdle } from '@/lib/api'
 
 const DRAG_THRESHOLD = 6
 const CHAT_W = 360
@@ -11,7 +11,7 @@ const CHAT_H_EXPANDED = 250
 const FRAME_SECONDS = 1 / 60
 const MAX_FRAME_SECONDS = 1 / 30
 const RAGE_HOLD_MS = 2500
-const RAGE_DIZZY_SECONDS = 0.6
+const RAGE_DIZZY_SECONDS = 1.6
 const RAGE_MORPH_SECONDS = 0.4
 const RAGE_LOOP_MIN_SECONDS = 5.6
 const RAGE_LOOP_VARIANCE_SECONDS = 1.4
@@ -24,7 +24,7 @@ const MODE_TRANSITION_SECONDS = 0.12
 type HslColor = { h: number; s: number; l: number }
 
 // ── Expressions ──────────────────────────────────────────────────────────
-type Expression = 'idle' | 'annoyed' | 'dizzy' | 'sleepy' | 'happy' | 'surprised' | 'shy' | 'mad'
+type Expression = 'idle' | 'annoyed' | 'dizzy' | 'sleepy' | 'happy' | 'surprised' | 'shy' | 'mad' | 'typing' | 'thinking'
 
 // ── Jellyfish anatomy ────────────────────────────────────────────────────
 const BELL_SEGS = 80
@@ -198,7 +198,7 @@ export function BlobCanvas() {
   // Smoothed squint
   const squintCurrentRef = useRef(0)
   // Staged post-drag transitions
-  const postDragDizzyRef = useRef(0)   // 2s dizzy buffer after drag release
+  const postDragDizzyRef = useRef(0)   // 1.6s dizzy buffer after drag release
   // Mad cooldown
   const madCooldownRef = useRef(0)
   const prevDraggingRef = useRef(false)
@@ -242,6 +242,13 @@ export function BlobCanvas() {
   const eyeMorphYOffRef = useRef(0)
   const eyeMorphPXRef = useRef(0)
   const eyeMorphPYRef = useRef(0)
+
+  // Typing state (cross-window IPC from chat inputs)
+  const isUserTypingRef = useRef(false)
+  // Smooth alpha for typing (like happyAlphaRef)
+  const typingAlphaRef = useRef(0)
+  // Smooth alpha for thinking (like madAlphaRef)
+  const thinkingAlphaRef = useRef(0)
 
   useEffect(() => {
     draggingStateRef.current = isDragging
@@ -378,6 +385,10 @@ export function BlobCanvas() {
       })
     }, 16)
 
+    // ── Typing detection from chat windows (cross-window IPC) ──────
+    const unlistenTyping = onUserTyping(() => { isUserTypingRef.current = true })
+    const unlistenIdle = onUserIdle(() => { isUserTypingRef.current = false })
+
     const draw = (time: number) => {
       ctx.setTransform(1, 0, 0, 1, 0, 0)
       ctx.clearRect(0, 0, w, h)
@@ -433,7 +444,9 @@ export function BlobCanvas() {
       let ragePhase: 'none' | 'dizzyBuffer' | 'dizzyToMad' | 'madLoop' | 'madOutro' = 'none'
 
       if (processing) {
-        expression = 'idle'
+        expression = 'thinking'
+      } else if (isUserTypingRef.current) {
+        expression = 'typing'
       } else if (dragging) {
         if (dragMs > RAGE_HOLD_MS) {
           expression = 'dizzy'
@@ -548,6 +561,16 @@ export function BlobCanvas() {
       happyAlphaRef.current += (happyAlphaTarget - happyAlphaRef.current) * frameLerp(0.35, dt)
       const happyAlpha = happyAlphaRef.current
 
+      // Update typingAlpha for smooth color/eye transitions
+      const typingAlphaTarget = expression === 'typing' ? 1 : 0
+      typingAlphaRef.current += (typingAlphaTarget - typingAlphaRef.current) * frameLerp(0.35, dt)
+      const typingAlpha = typingAlphaRef.current
+
+      // Update thinkingAlpha for smooth color/eye/ring transitions
+      const thinkingAlphaTarget = expression === 'thinking' ? 1 : 0
+      thinkingAlphaRef.current += (thinkingAlphaTarget - thinkingAlphaRef.current) * frameLerp(0.45, dt)
+      const thinkingAlpha = thinkingAlphaRef.current
+
       // Decay the post-mad recovery timer
       if (madRecoveryRef.current > 0) madRecoveryRef.current = tickTimer(madRecoveryRef.current, dt)
 
@@ -570,6 +593,7 @@ export function BlobCanvas() {
       if (expression !== prevExpressionSaved) {
         transitionTimerRef.current = 0
         popRef.current = 0.12  // small scale pulse on mode change
+        useConfigStore.getState().setCurrentExpression(expression)
       }
       prevExpressionRef.current = expression
       if (transitionTimerRef.current < 1) {
@@ -609,6 +633,18 @@ export function BlobCanvas() {
         const hapT2 = { h: 160, s: 65, l: 40 }
         target1 = mixHsl(idle1, hapT1, happyAlpha)
         target2 = mixHsl(idle2, hapT2, happyAlpha)
+      } else if (expression === 'typing') {
+        // Typing mode — warm yellow, blend with typingAlpha
+        const typT1 = { h: 48, s: 90, l: 60 }
+        const typT2 = { h: 38, s: 85, l: 48 }
+        target1 = mixHsl(idle1, typT1, typingAlpha)
+        target2 = mixHsl(idle2, typT2, typingAlpha)
+      } else if (expression === 'thinking') {
+        // Thinking mode — energetic orange, blend with thinkingAlpha
+        const thinkT1 = { h: 24, s: 90, l: 58 }
+        const thinkT2 = { h: 14, s: 85, l: 45 }
+        target1 = mixHsl(idle1, thinkT1, thinkingAlpha)
+        target2 = mixHsl(idle2, thinkT2, thinkingAlpha)
       } else if (expression === 'sleepy') {
         // Sleep mode — blend with intro/outro
         const sleepColorBlend = sleepProgress > 0 ? sleepProgress : (1 - sleepOutro)
@@ -631,10 +667,10 @@ export function BlobCanvas() {
       }
 
       // Add dynamic breathing to saturation and lightness
-      // Happy pulses faster, Sleepy pulses slower and deeper
-      const pulseSpeed = expression === 'happy' ? 4.5 : expression === 'sleepy' ? 1.5 : 3.0
-      const pulseAmpS = expression === 'sleepy' ? 3 : 6
-      const pulseAmpL = expression === 'sleepy' ? 5 : 4
+      // Happy/typing/thinking pulse faster, Sleepy pulses slower and deeper
+      const pulseSpeed = expression === 'happy' ? 4.5 : expression === 'typing' ? 3.5 : expression === 'thinking' ? 4.0 : expression === 'sleepy' ? 1.5 : 3.0
+      const pulseAmpS = expression === 'sleepy' ? 3 : expression === 'thinking' ? 6 : 6
+      const pulseAmpL = expression === 'sleepy' ? 5 : expression === 'thinking' ? 5 : 4
       
       const satOffset = Math.sin(t * pulseSpeed) * pulseAmpS
       const litOffset = Math.cos(t * (pulseSpeed * 1.1)) * pulseAmpL
@@ -840,6 +876,26 @@ export function BlobCanvas() {
         targetRot = 0
         targetIsStroke = 0
         targetYOff = 0
+      } else if (expression === 'typing') {
+        // Typing: wider, taller — curious, sparkly eyes
+        targetRx = eyeRadius * 1.15
+        targetRyTop = eyeRadius * 1.2 * (1 - squint) * (1 - blinkAmount)
+        targetRyBot = eyeRadius * 1.1 * (1 - squint) * (1 - blinkAmount)
+        targetRot = 0
+        targetIsStroke = 0
+        targetYOff = 0
+        targetPX = ep.x * 1.2
+        targetPY = ep.y * 1.2
+      } else if (expression === 'thinking') {
+        // Thinking: slightly narrowed bottom — focused computation
+        targetRx = eyeRadius * 1.0
+        targetRyTop = eyeRadius * 0.9 * (1 - squint) * (1 - blinkAmount)
+        targetRyBot = eyeRadius * 0.85 * (1 - squint) * (1 - blinkAmount)
+        targetRot = 0
+        targetIsStroke = 0
+        targetYOff = 0
+        targetPX = ep.x * 1.2
+        targetPY = ep.y * 1.2
       }
 
       // Smoothly morph values
@@ -889,8 +945,9 @@ export function BlobCanvas() {
 
         // During drag: reduce wave amplitude so legs don't flail
         const rageMotion = expression === 'dizzy' || inTransition
-        const tentAmp = ten.amp * (1 - dragBlend * 0.62) + (rageMotion ? 0.35 * dizzyAlpha : 0)
-        const tentSpeed = ten.speed * (rageMotion ? 1.25 : 1)
+        const thinkingMotion = expression === 'thinking'
+        const tentAmp = ten.amp * (1 - dragBlend * 0.62) + (rageMotion ? 0.35 * dizzyAlpha : 0) + (thinkingMotion ? 0.1 * thinkingAlpha : 0)
+        const tentSpeed = ten.speed * (rageMotion ? 1.25 : thinkingMotion ? 1.1 : 1)
 
         for (let i = 1; i < ten.pts.length; i++) {
           const p = ten.pts[i]
@@ -1137,6 +1194,22 @@ export function BlobCanvas() {
             ctx.arc(sh2X, sh2Y, 1.0, 0, Math.PI * 2)
             ctx.fillStyle = `hsla(0, 0%, 100%, ${0.25 * (1 - blinkAmount) * normalAlpha})`
             ctx.fill()
+
+            // Typing sparkle: third pulsing catchlight
+            if (expression === 'typing') {
+              const spkPulse = Math.sin(t * 2.5) * 0.5 + 0.5
+              const spkX = 1.5
+              const spkY = -3.5
+              const spkR = 1.2 + spkPulse * 0.6
+              const spkG = ctx.createRadialGradient(spkX, spkY, 0, spkX, spkY, spkR)
+              spkG.addColorStop(0, `hsla(45, 90%, 92%, ${0.8 * spkPulse * (1 - blinkAmount) * normalAlpha})`)
+              spkG.addColorStop(0.5, `hsla(45, 80%, 80%, ${0.3 * spkPulse * (1 - blinkAmount) * normalAlpha})`)
+              spkG.addColorStop(1, `hsla(45, 70%, 70%, 0)`)
+              ctx.beginPath()
+              ctx.arc(spkX, spkY, spkR, 0, Math.PI * 2)
+              ctx.fillStyle = spkG
+              ctx.fill()
+            }
           }
         }
 
@@ -1150,6 +1223,37 @@ export function BlobCanvas() {
           ctx.lineWidth = 2.2
           ctx.lineCap = 'round'
           ctx.stroke()
+        }
+
+        // Draw spiral morphing into a line (dizzy -> mad)
+        if (expression === 'dizzy' || inTransition) {
+          const morphT = inTransition ? dizzyToMadProgress : 0
+          
+          ctx.save()
+          // Spin the spiral, but damp the spin velocity down to 0 during transition
+          ctx.rotate(dizzySpinAngleRef.current * (1 - morphT))
+          
+          ctx.beginPath()
+          for (let s = 0; s < 20; s++) {
+            const sa = (s / 20) * Math.PI * 4
+            const sr = (s / 20) * 3.5
+            const spiralX = Math.cos(sa) * sr
+            const spiralY = Math.sin(sa) * sr
+            
+            // Unravel into a horizontal line that matches the current morphed eye radius
+            const lineX = -mRx + (s / 20) * (2 * mRx)
+            const lineY = 0
+            
+            const sx2 = spiralX + (lineX - spiralX) * morphT
+            const sy2 = spiralY + (lineY - spiralY) * morphT
+            
+            if (s === 0) ctx.moveTo(sx2, sy2)
+            else ctx.lineTo(sx2, sy2)
+          }
+          ctx.strokeStyle = `hsla(0, 0%, 95%, ${0.7 * dizzyAlpha})`
+          ctx.lineWidth = 1.2
+          ctx.stroke()
+          ctx.restore()
         }
 
         ctx.restore()
@@ -1210,29 +1314,8 @@ export function BlobCanvas() {
         }
       }
 
-      // Dizzy: spiral eyes + orbiting stars (with dizzyAlpha fade during post-drag)
-      if (expression === 'dizzy') {
-        for (let side = -1; side <= 1; side += 2) {
-          const ex = cx + side * eyeSpacing * sx
-          const ey = eyeY
-          ctx.save()
-          ctx.translate(ex, ey)
-          ctx.rotate(dizzySpinAngleRef.current)
-          ctx.beginPath()
-          for (let s = 0; s < 20; s++) {
-            const sa = (s / 20) * Math.PI * 4
-            const sr = (s / 20) * 3.5
-            const sx2 = Math.cos(sa) * sr
-            const sy2 = Math.sin(sa) * sr
-            if (s === 0) ctx.moveTo(sx2, sy2)
-            else ctx.lineTo(sx2, sy2)
-          }
-          ctx.strokeStyle = `hsla(0, 0%, 95%, ${0.7 * dizzyAlpha})`
-          ctx.lineWidth = 1.2
-          ctx.stroke()
-          ctx.restore()
-        }
-
+      // Dizzy: orbiting stars (with dizzyAlpha fade during post-drag and transition)
+      if (expression === 'dizzy' || inTransition) {
         for (const star of dizzyStars) {
           const starX = cx + Math.cos(star.angle) * star.dist * sx
           const starY = cy - 6 + Math.sin(star.angle) * star.dist * 0.4
@@ -1364,22 +1447,33 @@ export function BlobCanvas() {
       ctx.fill()
 
       // ══════════════════════════════════════════════════════════════
-      // LAYER 8 — Processing rings
+      // LAYER 8 — Processing / Thinking rings
       // ══════════════════════════════════════════════════════════════
       if (processing) {
-        const pp2 = Math.sin(t * 4) * 0.3 + 0.7
+        const isThinking = expression === 'thinking'
+        const ringPulse = Math.sin(t * (isThinking ? 6 : 4)) * 0.3 + 0.7
+        const ringAlpha = isThinking ? 1.4 : 1.0
 
         ctx.beginPath()
         ctx.arc(cx, cy - 2, BELL_W + 4, 0, Math.PI * 2)
-        ctx.strokeStyle = `hsla(${hue}, 72%, 65%, ${0.12 * pp2})`
+        ctx.strokeStyle = `hsla(${hue}, 72%, 65%, ${0.12 * ringAlpha * ringPulse})`
         ctx.lineWidth = 1.5
         ctx.stroke()
 
         ctx.beginPath()
         ctx.arc(cx, cy - 2, BELL_W + 8, 0, Math.PI * 2)
-        ctx.strokeStyle = `hsla(${hue}, 62%, 55%, ${0.05 * pp2})`
+        ctx.strokeStyle = `hsla(${hue}, 62%, 55%, ${0.05 * ringAlpha * ringPulse})`
         ctx.lineWidth = 1
         ctx.stroke()
+
+        // Third ring for thinking: wider, subtle
+        if (isThinking) {
+          ctx.beginPath()
+          ctx.arc(cx, cy - 2, BELL_W + 14, 0, Math.PI * 2)
+          ctx.strokeStyle = `hsla(${hue}, 55%, 50%, ${0.03 * ringPulse})`
+          ctx.lineWidth = 0.8
+          ctx.stroke()
+        }
       }
 
       // ── Hue sync ──────────────────────────────────────────────────
@@ -1398,6 +1492,8 @@ export function BlobCanvas() {
     return () => {
       cancelAnimationFrame(raf)
       clearInterval(cursorInterval)
+      unlistenTyping.then((fn) => fn())
+      unlistenIdle.then((fn) => fn())
     }
   }, [])
 

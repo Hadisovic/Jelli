@@ -21,6 +21,8 @@ pub struct ProviderConfig {
     pub max_tokens: Option<u32>,
     pub speaker_id: Option<u32>,
     pub quantization: Option<String>,
+    pub repeat_penalty: Option<f32>,
+    pub frequency_penalty: Option<f32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -118,6 +120,8 @@ async fn stream_ollama(
         "options": {
             "temperature": config.temperature.unwrap_or(0.7),
             "num_predict": config.max_tokens.unwrap_or(2048),
+            "repeat_penalty": config.repeat_penalty.unwrap_or(1.15),
+            "frequency_penalty": config.frequency_penalty.unwrap_or(0.1),
         }
     });
     let client = build_client();
