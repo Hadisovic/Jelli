@@ -1,9 +1,9 @@
-import { useCallback } from 'react'
+import { useCallback, useRef, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { motion, AnimatePresence } from 'motion/react'
 import { useConfigStore } from '@/stores/config'
 import { useChatStore } from '@/stores/chat'
-import { stopGeneration, setWindowGeometry } from '@/lib/api'
+import { stopGeneration, setWindowGeometry, getWindowPosition } from '@/lib/api'
 import { SettingsPanel } from './SettingsPanel'
 import { MessageList } from './MessageList'
 import { ChatInput } from './ChatInput'
@@ -21,6 +21,34 @@ export function ChatWidget() {
   const isProcessing = useChatStore((s) => s.isProcessing)
   const latestRequestId = useChatStore((s) => s.latestRequestId)
 
+  const wasExpandedRef = useRef(expanded)
+
+  useEffect(() => {
+    if (expanded === wasExpandedRef.current) return
+    wasExpandedRef.current = expanded
+
+    const updateGeometry = async () => {
+      try {
+        const pos = await getWindowPosition()
+        if (expanded) {
+          // Expand: resize to 360x500, move up-left
+          const newX = pos.x - (360 - 140)
+          const newY = pos.y - (500 - 160)
+          await setWindowGeometry(newX, newY, 360, 500)
+        } else {
+          // Collapse: resize to 140x160, move down-right
+          const newX = pos.x + (360 - 140)
+          const newY = pos.y + (500 - 160)
+          await setWindowGeometry(newX, newY, 140, 160)
+        }
+      } catch (e) {
+        console.error('[ChatWidget] Geometry update failed:', e)
+      }
+    }
+
+    updateGeometry()
+  }, [expanded])
+
   // Drag the expanded chat window via native Tauri drag
   const handleDragMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return
@@ -30,7 +58,6 @@ export function ChatWidget() {
 
   const handleClose = useCallback(() => {
     setExpanded(false)
-    setWindowGeometry(0, 0, 140, 140).catch(() => {})
   }, [setExpanded])
 
   return (
