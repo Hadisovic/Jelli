@@ -95,48 +95,72 @@ function App() {
 
   // LLM event listeners — both windows need them
   useEffect(() => {
+    let active = true
     const unlisteners: (() => void)[] = []
 
-    onLlmToken(({ request_id, token }) => {
-      const msgId = useChatStore.getState().getMessageIdForRequest(request_id)
-      if (msgId) {
-        useChatStore.getState().appendToMessage(msgId, token)
-      }
-    }).then((unlisten) => unlisteners.push(unlisten))
+    const setupListeners = async () => {
+      const u1 = await onLlmToken(({ request_id, token }) => {
+        if (!active) return
+        const msgId = useChatStore.getState().getMessageIdForRequest(request_id)
+        if (msgId) {
+          useChatStore.getState().appendToMessage(msgId, token)
+        }
+      })
+      if (!active) { u1(); return; }
+      unlisteners.push(u1)
 
-    onLlmDone(({ request_id }) => {
-      const msgId = useChatStore.getState().getMessageIdForRequest(request_id)
-      if (msgId) {
-        useChatStore.getState().updateMessage(msgId, { status: 'done' })
-      }
-      useChatStore.getState().setProcessing(false)
-    }).then((unlisten) => unlisteners.push(unlisten))
+      const u2 = await onLlmDone(({ request_id }) => {
+        if (!active) return
+        const msgId = useChatStore.getState().getMessageIdForRequest(request_id)
+        if (msgId) {
+          useChatStore.getState().updateMessage(msgId, { status: 'done' })
+        }
+        useChatStore.getState().setProcessing(false)
+      })
+      if (!active) { u2(); return; }
+      unlisteners.push(u2)
 
-    onLlmError(({ request_id, message }) => {
-      const msgId = useChatStore.getState().getMessageIdForRequest(request_id)
-      if (msgId) {
-        useChatStore.getState().updateMessage(msgId, {
-          text: `Error: ${message}`,
-          status: 'done',
-        })
-      }
-      useChatStore.getState().setProcessing(false)
-    }).then((unlisten) => unlisteners.push(unlisten))
+      const u3 = await onLlmError(({ request_id, message }) => {
+        if (!active) return
+        const msgId = useChatStore.getState().getMessageIdForRequest(request_id)
+        if (msgId) {
+          useChatStore.getState().updateMessage(msgId, {
+            text: `Error: ${message}`,
+            status: 'done',
+          })
+        }
+        useChatStore.getState().setProcessing(false)
+      })
+      if (!active) { u3(); return; }
+      unlisteners.push(u3)
 
-    onAudioChunk(({ pcm_base64 }) => {
-      useChatStore.getState().setPlayingAudio(true)
-      audioPlayer.enqueueChunk(pcm_base64)
-    }).then((unlisten) => unlisteners.push(unlisten))
+      const u4 = await onAudioChunk(({ pcm_base64 }) => {
+        if (!active) return
+        useChatStore.getState().setPlayingAudio(true)
+        audioPlayer.enqueueChunk(pcm_base64)
+      })
+      if (!active) { u4(); return; }
+      unlisteners.push(u4)
 
-    onAudioDone(() => {
-      useChatStore.getState().setPlayingAudio(false)
-    }).then((unlisten) => unlisteners.push(unlisten))
+      const u5 = await onAudioDone(() => {
+        if (!active) return
+        useChatStore.getState().setPlayingAudio(false)
+      })
+      if (!active) { u5(); return; }
+      unlisteners.push(u5)
 
-    onSidecarStatus(({ status, message }) => {
-      console.log(`[sidecar] ${status}${message ? `: ${message}` : ''}`)
-    }).then((unlisten) => unlisteners.push(unlisten))
+      const u6 = await onSidecarStatus(({ status, message }) => {
+        if (!active) return
+        console.log(`[sidecar] ${status}${message ? `: ${message}` : ''}`)
+      })
+      if (!active) { u6(); return; }
+      unlisteners.push(u6)
+    }
+
+    setupListeners()
 
     return () => {
+      active = false
       unlisteners.forEach((fn) => fn())
     }
   }, [])
