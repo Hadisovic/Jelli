@@ -51,3 +51,71 @@
 | `src/components/ChatInput.tsx` | Pass expression + context limit |
 | `src/components/ChatTextbox.tsx` | Dynamic resize + pass expression + context limit |
 | `src/styles/globals.css` | Removed max-height from chat-response |
+
+---
+
+## 2026-06-18: Personality Delivery Fix
+
+### Problem
+Jelli was responding formally ("I am doing well, thank you for asking.") instead of in character. Root causes:
+1. **Cross-window expression sync missing** — Blob expressions didn't reach chat windows, so mood suffixes never applied when chatting via floating window
+2. **Ollama persona injection targeted first user message** — By turn 2+, the system prompt was buried and ignored
+3. **Few-shot examples buried in system prompt** — Small Ollama models underweight system blocks vs. actual conversation history
+4. **Thinking messages sent to LLM** — ChatTextbox included internal thinking messages in context, confusing the model
+5. **Mood suffixes contradicted base rules** — e.g., happy mood said "use exclamation marks, caps" conflicting with "lowercase only"
+
+### Fixes Implemented
+
+#### 1. Cross-Window Expression Sync
+- **`src/lib/api.ts`** — Added `emitExpressionChanged(expression)` / `onExpressionChanged(handler)` Tauri IPC events (same pattern as existing `user:typing`/`user:idle`)
+- **`src/components/BlobCanvas.tsx`** — Calls `emitExpressionChanged(expression)` on every expression change
+- **`src/components/ChatTextbox.tsx`** — Listens for expression changes, updates local store
+- **`src/components/ChatInput.tsx`** — Listens for expression changes, updates local store
+
+#### 2. Ollama Persona Injection Fix
+- **`src-tauri/src/llm.rs`** — Changed `.find()` to `.rev().find()` targeting the LAST user message instead of first
+- **Turn 1**: Full system prompt injected (same as before)
+- **Turn 2+**: Short 1-line reminder: "stay in character as jelli — lowercase, 1 sentence, emojis, gen z texting, no periods, be casual and brief"
+- Keeps context clean while reinforcing character continuity
+
+#### 3. Few-Shot Extraction
+- **`src/lib/system-prompt.ts`** — Extracted 6 example pairs into `FEW_SHOT_MESSAGES` array (exported)
+- **`src/lib/api.ts`** — `sendChatMessage()` prepends `FEW_SHOT_MESSAGES` as `[systemMsg, ...FEW_SHOT_MESSAGES, ...messages]`, OUTSIDE context trim
+- Small models weight actual conversation history (role: user/assistant turns) far more than system blocks
+
+#### 4. Thinking Message Filter
+- **`src/components/ChatTextbox.tsx`** — Added `.filter((m) => m.status !== 'thinking')` before mapping messages to LLM format, matching existing ChatInput behavior
+
+#### 5. Mood Suffix Rewrite
+- **`src/lib/system-prompt.ts`** — All `MOOD_SUFFIXES` rewritten as tone modifiers only:
+  - Removed contradictory rules (happy no longer says "caps for EXCITEMENT")
+  - Respects base rules: lowercase, brief, no periods
+  - Each suffix shifts tone without overriding core persona
+
+#### 6. BASE_PROMPT Tightened
+- **`src/lib/system-prompt.ts`** — Reduced from 35+ lines to 6 lines
+- Front-loaded 5 critical rules (lowercase, 1 sentence, emojis, slang, jellyfish identity)
+- Removed redundant numbered rules that dilute attention
+
+#### 7. Parse Error Fix
+- **`src/lib/system-prompt.ts`** — Replaced smart/curly quotes (`'` U+2019) with straight ASCII apostrophes in string literals
+- TypeScript `tsc --noEmit` passes fine (handles smart quotes), but Vite's esbuild parser rejects them
+
+### Commit
+- `5ea4643` — "Fix Jelli personality delivery: cross-window expression sync, Ollama persona injection, few-shot extraction, and mood suffixes"
+- Pushed to `https://github.com/Hadisovic/Jelli.git`
+
+### Files Modified
+| File | Changes |
+|------|---------|
+| `src/lib/system-prompt.ts` | Extracted FEW_SHOT_MESSAGES, tightened BASE_PROMPT, rewrote MOOD_SUFFIXES, fixed smart quotes |
+| `src/lib/api.ts` | Added expression sync events, FEW_SHOT_MESSAGES prepend in sendChatMessage |
+| `src-tauri/src/llm.rs` | Ollama injection targets last user message, short reminder on turn 2+ |
+| `src/components/BlobCanvas.tsx` | Emits expression:changed events |
+| `src/components/ChatTextbox.tsx` | Expression listener, thinking message filter |
+| `src/components/ChatInput.tsx` | Expression listener |
+
+### Next Steps
+1. **Manual test** — Chat with Jelli: turn 1 casual, turn 2 casual, "who are you?", different expressions via floating chat
+2. **If still formal** — Consider adding more few-shot pairs or increasing Ollama `num_predict` / `temperature`
+3. **Dia 2 TTS** — Replace Sesame CSM (separate task)
