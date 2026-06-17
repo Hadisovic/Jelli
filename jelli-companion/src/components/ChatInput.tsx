@@ -189,22 +189,7 @@ export function ChatInput() {
   }, [])
 
   return (
-    <div className="relative">
-      {showCommands && (
-        <div className="command-dropdown" style={{ bottom: 'calc(100% + 8px)', left: 0, right: 0 }}>
-          {filteredCommands.map((cmd, idx) => (
-            <button
-              key={cmd.value}
-              type="button"
-              className={`command-item${idx === activeCommandIndex ? ' active' : ''}`}
-              onClick={() => handleSelectCommand(cmd.value)}
-            >
-              <span className="command-label">{cmd.label}</span>
-              <span className="command-desc">{cmd.desc}</span>
-            </button>
-          ))}
-        </div>
-      )}
+    <div className="flex flex-col gap-1.5">
       <div className="glass-panel rounded-xl overflow-hidden">
         <div className="flex items-end gap-2 px-3 py-2">
           <textarea
@@ -228,6 +213,21 @@ export function ChatInput() {
           </button>
         </div>
       </div>
+      {showCommands && (
+        <div className="command-dropdown-below">
+          {filteredCommands.map((cmd, idx) => (
+            <button
+              key={cmd.value}
+              type="button"
+              className={`command-item-below${idx === activeCommandIndex ? ' active' : ''}`}
+              onClick={() => handleSelectCommand(cmd.value)}
+            >
+              <span className="command-label-below">{cmd.label}</span>
+              <span className="command-desc-below">{cmd.desc}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

@@ -119,13 +119,19 @@ export function ChatTextbox() {
       const inputRowH = inputRow ? inputRow.getBoundingClientRect().height : CHAT_INPUT_HEIGHT
       const panelPaddingAndBorder = 18 // 16px padding + 2px border
 
+      let dropdownH = 0
+      const dropdownEl = panel.querySelector('.command-dropdown-below') as HTMLElement
+      if (dropdownEl) {
+        dropdownH = dropdownEl.getBoundingClientRect().height + 6 // 6px margin-top
+      }
+
       if (responseEl) {
         // responseEl.scrollHeight includes content + internal padding
         // Add 2px for response border + 8px for response margin-bottom
         const responseH = responseEl.scrollHeight + 2 + 8
-        targetH = panelPaddingAndBorder + responseH + inputRowH + 6 // 6px safety buffer
+        targetH = panelPaddingAndBorder + responseH + inputRowH + dropdownH + 6 // 6px safety buffer
       } else {
-        targetH = panelPaddingAndBorder + inputRowH
+        targetH = panelPaddingAndBorder + inputRowH + dropdownH
       }
 
       // Get current window size and clamp target height
@@ -159,7 +165,7 @@ export function ChatTextbox() {
     }
 
     measure()
-  }, [lastAssistant?.text, isProcessing, isPlayingAudio])
+  }, [lastAssistant?.text, isProcessing, isPlayingAudio, showCommands, filteredCommands])
 
   useEffect(() => {
     if (isProcessing) {
@@ -400,22 +406,6 @@ export function ChatTextbox() {
               </div>
             )}
 
-            {showCommands && (
-              <div className="command-dropdown">
-                {filteredCommands.map((cmd, idx) => (
-                  <button
-                    key={cmd.value}
-                    type="button"
-                    className={`command-item${idx === activeCommandIndex ? ' active' : ''}`}
-                    onClick={() => handleSelectCommand(cmd.value)}
-                  >
-                    <span className="command-label">{cmd.label}</span>
-                    <span className="command-desc">{cmd.desc}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
             <div className="chat-input-row">
               <div className="chat-input-wrapper">
                 <input
@@ -445,6 +435,22 @@ export function ChatTextbox() {
                 )}
               </button>
             </div>
+
+            {showCommands && (
+              <div className="command-dropdown-below">
+                {filteredCommands.map((cmd, idx) => (
+                  <button
+                    key={cmd.value}
+                    type="button"
+                    className={`command-item-below${idx === activeCommandIndex ? ' active' : ''}`}
+                    onClick={() => handleSelectCommand(cmd.value)}
+                  >
+                    <span className="command-label-below">{cmd.label}</span>
+                    <span className="command-desc-below">{cmd.desc}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
