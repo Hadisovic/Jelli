@@ -1,0 +1,9 @@
+name = "jelli-gateway"
+main = "src/index.ts"
+compatibility_date = "2024-04-03"
+
+[vars]
+# For development/local testing variables can be configured here or in local .dev.vars file
+GROQ_API_KEY = "invalid_groq_key_for_testing"
+MISTRAL_API_KEY = "invalid_mistral_key_for_testing"
+OPENROUTER_API_KEY = "invalid_openrouter_key_for_testing"

@@ -215,6 +215,10 @@ Replace original basic circles with dynamic vector-morphing character blobs.
 * **[csm_sidecar.py](file:///d:/Jelli/jelli-companion/sidecar/csm_sidecar.py):** Audio generation service.
 * **[generator.py](file:///d:/Jelli/jelli-companion/csm/generator.py):** Sesame CSM-1B core generation pipelines (Llama 3.2 + Mimi codec).
 
+### Cloud Edge Gateway Modules (`jelli-gateway/`)
+* **[index.ts](file:///d:/Jelli/jelli-gateway/src/index.ts):** Centralized cloud gateway proxy implementing payload sanitization, IP-based rate limiting (10 req/min), and 3-Tier failover streaming cascade (Groq ➔ Mistral ➔ OpenRouter).
+* **[wrangler.toml](file:///d:/Jelli/jelli-gateway/wrangler.toml):** Cloudflare wrangler configuration mapping environment variables and secret bindings.
+
 ---
 
 ## 7. Verification & Status Checklist
@@ -296,15 +300,17 @@ cd csm && pip install -e .
 
 ## 11. Recent Updates
 
-### 📅 June 18, 2026: Zero-Config 3-Tier Cascading LLM Gateway & Persona Sync
+### 📅 June 18, 2026: Secure Cloud Gateway Proxy Refactor & Persona Sync
 > [!IMPORTANT]
-> Built a secure, zero-config backend proxy LLM gateway that sequence-routes requests through three fallback tiers (Groq, Mistral, OpenRouter) and isolates developer API keys. Also fixed Jelli's character rules application.
+> Migrated the 3-Tier Cascading Failover Gateway to a centralized serverless Cloudflare Worker proxy (`jelli-gateway`) to abstract developer API keys, secure the app bundle against decompilation, and prevent sniffing (Wireshark).
 
-* **3-Tier Cascading LLM Gateway:** Implemented sequential failover client loops in [llm.rs](file:///d:/Jelli/jelli-companion/src-tauri/src/llm.rs) (Groq `llama-3.1-8b-instant` ➔ Mistral Small ➔ OpenRouter `meta-llama/llama-3-8b-instruct:free`). Automatically intercepts HTTP errors (e.g. `429 Too Many Requests`) or connection errors.
-* **Mid-Stream Resets:** Emitters dispatch the `"llm:clear"` event to the frontend on mid-stream failures, clearing the current message bubble to start fresh on the next fallback tier.
-* **Secure Backend Key Loading:** Implemented `load_env_file` in [lib.rs](file:///d:/Jelli/jelli-companion/src-tauri/src/lib.rs) to search and load `.env` runtime configurations on startup, isolating keys from the React build bundle.
-* **Premium Status Panel UI:** Integrated an active gateway status card in [SettingsPanel.tsx](file:///d:/Jelli/jelli-companion/src/components/SettingsPanel.tsx) with HSL indicators, green ping pulses, and succession priority details.
-* **Generic Runtime Refactor:** Ported all Tauri RPC methods to be generic over `tauri::Runtime` to decouple webview dependency locks for unit test compilation.
+* **Cloud Edge Gateway Proxy:** Created `jelli-gateway` Cloudflare Worker in [index.ts](file:///d:/Jelli/jelli-gateway/src/index.ts) that executes the 3-Tier failover cascade (Groq ➔ Mistral ➔ OpenRouter) completely in the cloud.
+* **API Key Abstraction:** Removed `GROQ_API_KEY`, `MISTRAL_API_KEY`, and `OPENROUTER_API_KEY` environmental variable checks entirely from the client application. They are now vaulted as secure environment secrets in the Cloudflare Worker runtime.
+* **IP-Based Rate Limiting:** Implemented a rolling-window token limiter inside the worker capping incoming client requests to **10 requests per minute** per unique IP address.
+* **Payload Verification:** Added sanitization checks in the worker to drop unauthorized JSON parameters and throw a `400 Bad Request` if a prompt injection is detected (e.g., trying to override the system prompt).
+* **Client Gateway Integration:** Rewrote `stream_gateway` in [llm.rs](file:///d:/Jelli/jelli-companion/src-tauri/src/llm.rs) to POST payload parameters to the worker URL (read from `JELLI_GATEWAY_URL` in development, or defaulting to production worker URL).
+* **Mid-Stream Resets:** If an upstream client fails mid-generation on the worker, the worker outputs a special `data: [CLEAR]` event chunk. The Tauri app catches this to clear the UI bubble text before the next tier resumes.
+* **Generic Runtime Refactor:** Decoupled Tauri window contexts to be generic over `tauri::Runtime` for compiler testing.
 * **Cross-Window Expression Sync:** Added Tauri IPC events in [api.ts](file:///d:/Jelli/jelli-companion/src/lib/api.ts) (`emitExpressionChanged`/`onExpressionChanged`). The canvas emits expression changes to notify ChatTextbox and ChatInput immediately, applying appropriate mood suffixes during floating chat sessions.
 * **Ollama Target Injection Fix:** Patched [llm.rs](file:///d:/Jelli/jelli-companion/src-tauri/src/llm.rs) to target the *last* user message in the thread. Prepend system persona reminder on turn 2+ ("stay in character as jelli — lowercase, 1 sentence, emojis, gen z texting, no periods") to maintain consistency without inflating context size.
 * **Few-Shot Prompt Extraction:** Extracted training prompt examples into `FEW_SHOT_MESSAGES` in [system-prompt.ts](file:///d:/Jelli/jelli-companion/src/lib/system-prompt.ts) and prepended them directly as conversation history. This forces smaller LLMs (e.g. Qwen:4b) to weigh character constraints more heavily.

@@ -188,7 +188,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                       </span>
                     </div>
                     <p className="text-[11px] text-white/45 leading-relaxed">
-                      Automatically routes queries with cascading fallback logic if a provider is rate-limited or fails.
+                      Queries are safely routed through a secure cloud proxy to abstract developer keys, automatically failing over to fallback tiers if needed.
                     </p>
                     <div className="space-y-1.5 pt-1 border-t border-white/5">
                       <div className="flex items-center gap-2 text-xs">
