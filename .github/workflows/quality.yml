@@ -30,11 +30,11 @@ jobs:
       # ── Gateway Worker ───────────────────────────────────────────────────────
       - run: npm ci
         working-directory: jelli-gateway
-      - run: npx tsc --noEmit
+      - run: npx --no-install tsc --noEmit
         working-directory: jelli-gateway
       - run: npm test
         working-directory: jelli-gateway
-      - run: npx wrangler deploy --dry-run
+      - run: npx --no-install wrangler deploy --dry-run
         working-directory: jelli-gateway
 
       # ── Rust ─────────────────────────────────────────────────────────────────
