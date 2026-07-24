@@ -9,6 +9,7 @@ use tauri::Manager;
 
 const SETTINGS_FILE: &str = "settings.json";
 const MEMORY_FILE: &str = "memory.json";
+const KEYRING_SERVICE: &str = "com.jelli.companion";
 
 struct AppState {
     cancel_map: CancelMap,
@@ -215,6 +216,12 @@ fn save_settings(app: tauri::AppHandle, settings: serde_json::Value) -> Result<(
         .map_err(|e| format!("app_data_dir: {e}"))?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("create_dir_all: {e}"))?;
     let path = dir.join(SETTINGS_FILE);
+    let mut settings = settings;
+    if let Some(key) = settings.get("apiKey").and_then(serde_json::Value::as_str).filter(|key| !key.is_empty()) {
+        let provider = settings.get("llmProvider").and_then(serde_json::Value::as_str).unwrap_or("openai");
+        set_provider_api_key(provider.to_string(), key.to_string())?;
+    }
+    if let Some(object) = settings.as_object_mut() { object.remove("apiKey"); }
     let json =
         serde_json::to_string_pretty(&settings).map_err(|e| format!("serialize settings: {e}"))?;
     std::fs::write(&path, json).map_err(|e| format!("write settings: {e}"))?;
@@ -232,9 +239,35 @@ fn load_settings(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
         return Ok(serde_json::json!({}));
     }
     let data = std::fs::read_to_string(&path).map_err(|e| format!("read settings: {e}"))?;
-    let val: serde_json::Value =
+    let mut val: serde_json::Value =
         serde_json::from_str(&data).map_err(|e| format!("parse settings: {e}"))?;
+    if let Some(key) = val.get("apiKey").and_then(serde_json::Value::as_str).filter(|key| !key.is_empty()) {
+        let provider = val.get("llmProvider").and_then(serde_json::Value::as_str).unwrap_or("openai");
+        set_provider_api_key(provider.to_string(), key.to_string())?;
+        if let Some(object) = val.as_object_mut() { object.remove("apiKey"); }
+        let json = serde_json::to_string_pretty(&val).map_err(|e| format!("serialize settings: {e}"))?;
+        std::fs::write(&path, json).map_err(|e| format!("migrate settings: {e}"))?;
+    }
     Ok(val)
+}
+
+fn keyring_entry(provider: &str) -> Result<keyring::v1::Entry, String> {
+    keyring::v1::Entry::new(KEYRING_SERVICE, provider).map_err(|e| format!("credential vault: {e}"))
+}
+
+#[tauri::command]
+fn set_provider_api_key(provider: String, api_key: String) -> Result<(), String> {
+    if api_key.is_empty() { return Ok(()); }
+    keyring_entry(&provider)?.set_password(&api_key).map_err(|e| format!("save credential: {e}"))
+}
+
+#[tauri::command]
+fn get_provider_api_key(provider: String) -> Result<Option<String>, String> {
+    match keyring_entry(&provider)?.get_password() {
+        Ok(key) => Ok(Some(key)),
+        Err(keyring::v1::Error::NoEntry) => Ok(None),
+        Err(e) => Err(format!("read credential: {e}")),
+    }
 }
 
 fn load_env_file(app_handle: Option<&tauri::AppHandle>) {
@@ -380,6 +413,8 @@ pub fn run() {
             send_tts,
             save_settings,
             load_settings,
+            set_provider_api_key,
+            get_provider_api_key,
             save_memory,
             load_memory,
         ])

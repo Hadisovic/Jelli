@@ -23,6 +23,7 @@ pub struct ProviderConfig {
     pub quantization: Option<String>,
     pub repeat_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
+    pub memory_context: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -90,6 +91,7 @@ async fn stream_gateway<R: tauri::Runtime>(
 
     let body = serde_json::json!({
         "messages": messages,
+        "memory_context": config.memory_context,
         "temperature": config.temperature.unwrap_or(0.7),
         "max_tokens": config.max_tokens.unwrap_or(2048),
     });

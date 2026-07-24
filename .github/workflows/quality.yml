@@ -1,0 +1,47 @@
+name: Quality
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            jelli-companion/package-lock.json
+            jelli-gateway/package-lock.json
+
+      # ── Frontend ────────────────────────────────────────────────────────────
+      - run: npm ci
+        working-directory: jelli-companion
+      - run: npm run lint
+        working-directory: jelli-companion
+      - run: npm run type-check
+        working-directory: jelli-companion
+      - run: npm run build
+        working-directory: jelli-companion
+
+      # ── Gateway Worker ───────────────────────────────────────────────────────
+      - run: npm ci
+        working-directory: jelli-gateway
+      - run: npx tsc --noEmit
+        working-directory: jelli-gateway
+      - run: npm test
+        working-directory: jelli-gateway
+      - run: npx wrangler deploy --dry-run
+        working-directory: jelli-gateway
+
+      # ── Rust ─────────────────────────────────────────────────────────────────
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+        working-directory: jelli-companion
+      - run: cargo check --manifest-path src-tauri/Cargo.toml
+        working-directory: jelli-companion

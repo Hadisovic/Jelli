@@ -53,13 +53,15 @@ export const useMemoryStore = create<MemoryStore>((set, get) => ({
     } else if (fact.key === 'userAge') {
       updated.userProfile = { ...updated.userProfile, age: parseInt(fact.value) || undefined }
     } else if (fact.key === 'userJob') {
-      updated.userProfile = { ...updated.userProfile, communicationStyle: updated.userProfile.communicationStyle || [] }
+      updated.userProfile = { ...updated.userProfile, job: fact.value }
     } else if (fact.key === 'userLocation') {
-      updated.userProfile = { ...updated.userProfile, communicationStyle: updated.userProfile.communicationStyle || [] }
+      updated.userProfile = { ...updated.userProfile, location: fact.value }
     } else if (fact.key === 'userLanguages') {
       updated.userProfile = { ...updated.userProfile, languages: fact.value.split(',').map(l => l.trim()) }
     } else if (fact.key === 'userInterest') {
-      updated.userProfile = { ...updated.userProfile, communicationStyle: updated.userProfile.communicationStyle || [] }
+      const interests = new Set(updated.userProfile.interests ?? [])
+      interests.add(fact.value)
+      updated.userProfile = { ...updated.userProfile, interests: [...interests] }
     }
     // Handle preference facts
     else if (fact.key === 'prefCommunicationStyle') {
@@ -123,6 +125,10 @@ export const useMemoryStore = create<MemoryStore>((set, get) => ({
       updated.userProfile = { ...updated.userProfile, nickname: undefined }
     } else if (key === 'userAge') {
       updated.userProfile = { ...updated.userProfile, age: undefined }
+    } else if (key === 'userJob') {
+      updated.userProfile = { ...updated.userProfile, job: undefined }
+    } else if (key === 'userLocation') {
+      updated.userProfile = { ...updated.userProfile, location: undefined }
     }
     // Check facts
     else {
@@ -142,10 +148,7 @@ export const useMemoryStore = create<MemoryStore>((set, get) => ({
       if (fact.shouldPersist) {
         const { longTerm } = get()
         const existing = longTerm.facts.findIndex(f => f.key === fact.key)
-        if (existing < 0) {
-          // New fact - add to long-term
-          get().addFact(fact)
-        }
+        if (existing < 0 || fact.updatedAt > longTerm.facts[existing].updatedAt) get().addFact(fact)
       }
     }
 
@@ -158,9 +161,7 @@ export const useMemoryStore = create<MemoryStore>((set, get) => ({
     for (const fact of session.recentImportantFacts) {
       if (fact.shouldPersist) {
         const existing = longTerm.facts.findIndex(f => f.key === fact.key)
-        if (existing < 0) {
-          get().addFact(fact)
-        }
+        if (existing < 0 || fact.updatedAt > longTerm.facts[existing].updatedAt) get().addFact(fact)
       }
     }
 

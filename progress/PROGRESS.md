@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/Language-TypeScript%20%2B%20Rust-orange?style=for-the-badge&logo=rust" alt="Language" />
 </p>
 
-**Last Updated:** 2026-06-18  
+**Last Updated:** 2026-07-24  
 **Current Active Branch:** `master`
 
 ---
@@ -329,6 +329,38 @@ pip install -r sidecar/requirements.txt
 ---
 
 ## 11. Recent Updates
+
+### 📅 July 24, 2026: Beta Gateway & Reliability Design + Signed Windows Installer
+
+**Branch:** `master`  
+**Status:** Complete
+
+#### Key Deliverables
+
+1. **Beta Gateway & Rate Limiting (`jelli-gateway`)**:
+   - `ACCESS_MODE` guard implemented in Worker: default `beta-public` allows anonymous chat via Cloudflare client IP rate limiting. Reserved `authenticated` mode returns `501 Not Implemented`.
+   - Structured, non-sensitive JSON logging for request outcomes (`event`, `mode`, `rateLimitAllowed`, `retryAfterSeconds`, `tier`, `status`).
+   - Expanded test coverage in `gateway.test.ts` (body size limits, character bounds per message and conversation, missing IP headers, `Retry-After` header validation).
+
+2. **OS Credential Vault Migration (`jelli-companion/src-tauri`)**:
+   - Integrated Rust `keyring` crate (`com.jelli.companion` service name).
+   - Migration logic in `save_settings` and `load_settings` strips plaintext provider API keys from `settings.json` and securely stores them in the OS credential vault.
+   - SettingsPanel automatically pre-fills API keys from the OS vault when opened or when switching providers.
+
+3. **Memory System Integration**:
+   - Direct extraction of memory context via `formatMemoryContext()` from the store in `api.ts`, decoupling prompt memory context from system prompt text structure.
+
+4. **CI & Quality Assurance**:
+   - Added `type-check` script (`tsc -b --noEmit`) to `package.json`.
+   - Added `cargo fmt --check` and companion `type-check` steps to `.github/workflows/quality.yml`.
+
+5. **Signed Windows NSIS Installer**:
+   - Configured `tauri.conf.json` for per-machine NSIS packaging with installer shortcuts and dark-themed header & sidebar BMP graphics.
+   - Generated 3-year self-signed code-signing certificate (`jelli-cert.pfx` / `jelli-cert.cer`).
+   - Provided one-click tester script (`trust-jelli-cert.ps1`) to trust the cert and eliminate Windows SmartScreen warnings.
+   - Successfully built and signed output bundle: `Jelli Companion_0.1.0-beta.1_x64-setup.exe`.
+
+---
 
 ### 📅 June 18, 2026: Separate Settings from Chat + Window Size Fix
 

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { useConfigStore } from '@/stores/config'
 import type { LLMProvider } from '@/stores/config'
 import { useMemoryStore } from '@/stores/memory'
-import { saveSettings, loadSettings } from '@/lib/api'
+import { saveSettings, loadSettings, saveProviderApiKey, loadProviderApiKey } from '@/lib/api'
 import { setSfxVolume, setSfxMuted } from '@/lib/sfx'
 
 interface SettingsPanelProps {
@@ -59,7 +59,7 @@ const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
 ]
 
 const PERSISTED_KEYS = [
-  'llmProvider', 'llmModel', 'apiKey', 'ollamaUrl',
+  'llmProvider', 'llmModel', 'ollamaUrl',
   'temperature', 'maxTokens', 'contextMessages', 'speakerId',
   'quantization', 'blobOpacity', 'repeatPenalty', 'frequencyPenalty',
   'blobSize', 'alwaysOnTop', 'sfxVolume', 'sfxMuted',
@@ -123,6 +123,9 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
     for (const key of PERSISTED_KEYS) {
       toSave[key] = state[key]
     }
+    if (state.llmProvider !== 'gateway' && state.llmProvider !== 'ollama' && state.apiKey) {
+      await saveProviderApiKey(state.llmProvider, state.apiKey)
+    }
     await saveSettings(toSave)
     setSaved(true)
     setTimeout(() => setSaved(false), 1500)
@@ -131,7 +134,19 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
   const handleLoad = useCallback(async () => {
     const data = await loadSettings()
     useConfigStore.getState().loadSettings(data as Record<string, unknown>)
+    const provider = useConfigStore.getState().llmProvider
+    const key = await loadProviderApiKey(provider)
+    useConfigStore.getState().setApiKey(key ?? '')
   }, [])
+
+  // Pre-fill API key from the OS vault whenever the panel opens or the provider changes
+  React.useEffect(() => {
+    if (!open) return
+    if (llmProvider === 'gateway' || llmProvider === 'ollama') return
+    loadProviderApiKey(llmProvider).then((key) => {
+      if (key) useConfigStore.getState().setApiKey(key)
+    }).catch(() => {})
+  }, [open, llmProvider])
 
   const handleClearMemory = useCallback(async () => {
     setClearingMemory(true)

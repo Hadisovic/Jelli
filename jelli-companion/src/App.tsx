@@ -6,7 +6,7 @@ import { SettingsPanel } from '@/components/SettingsPanel'
 import { useConfigStore } from '@/stores/config'
 import { useChatStore } from '@/stores/chat'
 import { useMemoryStore } from '@/stores/memory'
-import { startSidecar, stopSidecar, onLlmToken, onLlmDone, onLlmClear, onLlmError, onAudioChunk, onAudioDone, onSidecarStatus, hideChatWindow, getWindowLabel, loadSettings, onOpenSettings, setWindowGeometry, getWindowPosition } from '@/lib/api'
+import { startSidecar, stopSidecar, onLlmToken, onLlmDone, onLlmClear, onLlmError, onAudioChunk, onAudioDone, onSidecarStatus, hideChatWindow, getWindowLabel, loadSettings, loadProviderApiKey, onOpenSettings, setWindowGeometry, getWindowPosition } from '@/lib/api'
 import { audioPlayer } from '@/lib/audio'
 import { loadSounds } from '@/lib/sfx'
 
@@ -21,8 +21,11 @@ function App() {
 
   // Load persisted settings on startup
   useEffect(() => {
-    loadSettings().then((data) => {
+    loadSettings().then(async (data) => {
       useConfigStore.getState().loadSettings(data as Record<string, unknown>)
+      const provider = useConfigStore.getState().llmProvider
+      const apiKey = await loadProviderApiKey(provider)
+      useConfigStore.getState().setApiKey(apiKey ?? '')
     }).catch(() => {})
     loadSounds().catch(() => {})
   }, [])

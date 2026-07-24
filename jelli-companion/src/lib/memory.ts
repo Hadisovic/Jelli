@@ -41,6 +41,9 @@ export interface LongTermMemory {
     name?: string
     nickname?: string
     age?: number
+    job?: string
+    location?: string
+    interests?: string[]
     sex?: string
     languages?: string[]
     communicationStyle?: string[]
@@ -358,6 +361,9 @@ export function formatMemoryContext(memory: MemoryState): string {
   if (profile.name) profileLines.push(`- Name: ${profile.name}`)
   if (profile.nickname) profileLines.push(`- Nickname: ${profile.nickname}`)
   if (profile.age) profileLines.push(`- Age: ${profile.age}`)
+  if (profile.job) profileLines.push(`- Job: ${profile.job}`)
+  if (profile.location) profileLines.push(`- Location: ${profile.location}`)
+  if (profile.interests?.length) profileLines.push(`- Interests: ${profile.interests.join(', ')}`)
   if (profile.sex) profileLines.push(`- Gender: ${profile.sex}`)
   if (profile.languages?.length) profileLines.push(`- Languages: ${profile.languages.join(', ')}`)
   if (profile.communicationStyle?.length) profileLines.push(`- Communication style: ${profile.communicationStyle.join(', ')}`)

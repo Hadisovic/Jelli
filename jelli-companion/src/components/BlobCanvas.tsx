@@ -3,7 +3,7 @@ import { useConfigStore } from '@/stores/config'
 import { useChatStore } from '@/stores/chat'
 import { BLOB } from '@/lib/constants'
 import { getWindowPosition, setWindowPosition, showChatWindow, getScreenInfo, setChatWindowPosition, getCursorPosition, onUserTyping, onUserIdle, emitShowChatWindow, emitHideChatWindow, emitExpressionChanged } from '@/lib/api'
-import { play as playSfx } from '@/lib/sfx'
+import { playClick, playWake, playSad, playDizzy } from '@/lib/sfx'
 
 const DRAG_THRESHOLD = 6
 const CHAT_W = 360
@@ -616,12 +616,11 @@ export function BlobCanvas() {
         useConfigStore.getState().setCurrentExpression(expression)
         emitExpressionChanged(expression)
 
-        // ── Sound effects on expression change ──────────────────
-        if (expression === 'happy') playSfx('happy')
-        else if (expression === 'dizzy') playSfx('dizzy')
-        else if (expression === 'mad') playSfx('mad')
-        else if (expression === 'sleepy') playSfx('sleep')
-        else if (prevExpressionSaved === 'sleepy') playSfx('wake')
+        // ── Cybernetic SFX on expression change ─────────────────
+        if (expression === 'sleepy') playSad()
+        else if (prevExpressionSaved === 'sleepy') playWake()
+        else if (expression === 'dizzy') playDizzy()
+        else if (expression === 'mad') playSad()
       }
       prevExpressionRef.current = expression
       if (transitionTimerRef.current < 1) {
@@ -1574,7 +1573,7 @@ export function BlobCanvas() {
       isPointerDownRef.current = false
 
       if (!didDragRef.current) {
-        playSfx('click')
+        playClick()
         const open = useConfigStore.getState().textboxOpen
         if (open) {
           setTextboxOpen(false)

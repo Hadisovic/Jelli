@@ -7,7 +7,6 @@ import { sendChatMessage, hideChatWindow, resizeWindow, emitUserTyping, emitUser
 import { handleMemoryCommand, extractFacts } from '@/lib/memory'
 
 const CHAT_INPUT_HEIGHT = 56  // input row + padding
-const CHAT_MIN_H = 56        // just the input row
 const CHAT_MAX_H = 320       // never exceed this
 
 const COMMANDS = [
@@ -130,10 +129,10 @@ export function ChatTextbox() {
       const responseEl = responseRef.current
       if (!panel) return
 
-      let targetH = CHAT_MIN_H
       const inputRow = panel.querySelector('.chat-input-row') as HTMLElement
       const inputRowH = inputRow ? inputRow.getBoundingClientRect().height : CHAT_INPUT_HEIGHT
       const panelPaddingAndBorder = 18 // 16px padding + 2px border
+      let targetH: number
 
       let dropdownH = 0
       const dropdownEl = panel.querySelector('.command-dropdown-below') as HTMLElement

@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Jelli Companion",
-  "version": "0.1.0",
+  "version": "0.1.0-beta.1",
   "identifier": "com.jelli.companion",
   "build": {
     "frontendDist": "../dist",
@@ -48,7 +48,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
+    "publisher": "Hadi Hadisovic",
+    "copyright": "Copyright © 2025 Hadi Hadisovic",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -56,8 +58,17 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "android": {
-      "debugApplicationIdSuffix": ".debug"
+    "windows": {
+      "certificateThumbprint": "20DD91B05D84571E263BBAD6D71DEDFA545DE5D7",
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "http://timestamp.digicert.com",
+      "nsis": {
+        "displayLanguageSelector": false,
+        "installMode": "perMachine",
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "icons/installer-header.bmp",
+        "sidebarImage": "icons/installer-sidebar.bmp"
+      }
     }
   }
 }

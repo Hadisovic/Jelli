@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jelli SFX Audition</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; color: #38bdf8; }
+    .subtitle { color: #64748b; font-size: 0.85rem; margin-bottom: 2rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem; }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+    .card-header h2 { font-size: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+    .badge {
+      font-size: 0.65rem;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #334155;
+      color: #94a3b8;
+    }
+    .badge.active { background: #22c55e22; color: #4ade80; }
+    .samples { display: flex; flex-direction: column; gap: 0.5rem; }
+    .sample-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .sample-row button {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      border: 1px solid #475569;
+      background: #0f172a;
+      color: #e2e8f0;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .sample-row button:hover { background: #334155; border-color: #64748b; }
+    .sample-row button.playing { background: #3b82f6; border-color: #3b82f6; }
+    .sample-name {
+      flex: 1;
+      font-size: 0.8rem;
+      color: #cbd5e1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sample-duration { font-size: 0.7rem; color: #64748b; width: 35px; text-align: right; }
+    .pick-btn {
+      font-size: 0.7rem;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      background: transparent;
+      color: #94a3b8;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .pick-btn:hover { background: #22c55e22; color: #4ade80; border-color: #4ade8055; }
+    .pick-btn.chosen { background: #22c55e33; color: #4ade80; border-color: #4ade80; }
+    .section-title { color: #475569; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; margin: 2rem 0 0.75rem; }
+    .custom-upload {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    .custom-upload label {
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px dashed #475569;
+      color: #64748b;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .custom-upload label:hover { border-color: #64748b; color: #94a3b8; }
+    .custom-upload input { display: none; }
+    .summary {
+      margin-top: 2rem;
+      padding: 1rem;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+    }
+    .summary h3 { font-size: 0.85rem; margin-bottom: 0.5rem; color: #38bdf8; }
+    .summary pre {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      white-space: pre-wrap;
+      background: #0f172a;
+      padding: 0.75rem;
+      border-radius: 8px;
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Jelli SFX Audition</h1>
+  <p class="subtitle">Preview sounds for each expression. Upload your own or use the built-in generators. Your picks are saved to localStorage.</p>
+
+  <div id="app" class="grid"></div>
+
+  <div class="section-title" style="margin-top:2.5rem">Current Picks</div>
+  <div class="summary">
+    <h3>Selected Sound Files</h3>
+    <p style="font-size:0.75rem;color:#64748b;margin-bottom:0.5rem">Drop the chosen .wav files into <code>public/sounds/</code> and update <code>sfx.ts</code> accordingly.</p>
+    <pre id="picks-output">No picks yet</pre>
+  </div>
+
+  <script>
+    const SOUNDS = [
+      { id: 'click', label: 'Click / Tap', icon: '🫧', samples: [
+        { name: 'Bubble Pop', src: 'samples/click_bubble_pop.wav', gen: () => genClick() },
+        { name: 'Soft Click', src: 'samples/click_soft.wav', gen: () => genClick2() },
+        { name: 'Water Drop', src: 'samples/click_drop.wav', gen: () => genClick3() },
+      ]},
+      { id: 'sleep', label: 'Sleep', icon: '😴', samples: [
+        { name: 'Descending Chime', src: 'samples/sleep_chime.wav', gen: () => genSleep1() },
+        { name: 'Yawn Fade', src: 'samples/sleep_yawn.wav', gen: () => genSleep2() },
+        { name: 'Soft Buzz', src: 'samples/sleep_buzz.wav', gen: () => genSleep3() },
+      ]},
+      { id: 'wake', label: 'Wake Up', icon: '☀️', samples: [
+        { name: 'Ascending Chime', src: 'samples/wake_chime.wav', gen: () => genWake1() },
+        { name: 'Bright Ping', src: 'samples/wake_ping.wav', gen: () => genWake2() },
+        { name: 'Gentle Rise', src: 'samples/wake_rise.wav', gen: () => genWake3() },
+      ]},
+      { id: 'happy', label: 'Happy', icon: '✨', samples: [
+        { name: 'Sparkle Jingle', src: 'samples/happy_sparkle.wav', gen: () => genHappy1() },
+        { name: 'Cheer Chord', src: 'samples/happy_chord.wav', gen: () => genHappy2() },
+        { name: 'Bubbly Burst', src: 'samples/happy_bubble.wav', gen: () => genHappy3() },
+      ]},
+      { id: 'dizzy', label: 'Dizzy', icon: '🌀', samples: [
+        { name: 'Wobbly Warble', src: 'samples/dizzy_warble.wav', gen: () => genDizzy1() },
+        { name: 'Spinning Tone', src: 'samples/dizzy_spin.wav', gen: () => genDizzy2() },
+        { name: 'Wavy Bleep', src: 'samples/dizzy_wave.wav', gen: () => genDizzy3() },
+      ]},
+      { id: 'mad', label: 'Mad', icon: '💢', samples: [
+        { name: 'Grumpy Puff', src: 'samples/mad_puff.wav', gen: () => genMad1() },
+        { name: 'Angry Pop', src: 'samples/mad_pop.wav', gen: () => genMad2() },
+        { name: 'Low Growl', src: 'samples/mad_growl.wav', gen: () => genMad3() },
+      ]},
+    ];
+
+    let picks = JSON.parse(localStorage.getItem('jelli-sfx-picks') || '{}');
+    let audioCtx = null;
+
+    function getCtx() {
+      if (!audioCtx) audioCtx = new AudioContext({ sampleRate: 44100 });
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
+    // ── Generators ──────────────────────────────────────────────
+    function renderSamples(sr, fn) { const c = getCtx(); const buf = fn(sr); const b = c.createBuffer(1, buf.length, sr); b.getChannelData(0).set(buf); return b; }
+
+    function genClick() { const sr=44100,d=0.15,n=Math.floor(sr*d),o=new Float32Array(n); for(let i=0;i<n;i++){const t=i/sr,e=1-t/d,f=800+600*(t/d);o[i]=e*0.4*Math.sin(2*Math.PI*f*t);} return o; }
+    function genClick2() { const sr=44100,d=0.1,n=Math.floor(sr*d),o=new Float32Array(n); for(let i=0;i<n;i++){const t=i/sr,e=Math.max(0,1-t/d);o[i]=e*0.3*Math.sin(2*Math.PI*1200*t)*Math.exp(-t*30);} return o; }
+    function genClick3() { const sr=44100,d=0.2,n=Math.floor(sr*d),o=new Float32Array(n); for(let i=0;i<n;i++){const t=i/sr,e=Math.max(0,1-t/d);o[i]=e*0.35*Math.sin(2*Math.PI*(600+400*Math.sin(t*20))*t);} return o; }
+
+    function genSleep1() { const sr=44100,d=1.2,n=Math.floor(sr*d),o=new Float32Array(n); for(let i=0;i<n;i++){const t=i/sr,e=Math.max(0,1-t/d)**2,f=600-300*(t/d);o[i]=e*0.3*Math.sin(2*Math.PI*f*t);} return o; }
+    function genSleep2() { const sr=44100,d=1.5,n=Math.floor(sr*d),o=new Float32Array(n); for(let i=0;i<n;i++){const t=i/sr,e=Math.max(0,1-t/d),f=400-200*(t/d);o[i]=e*0.25*(Math.sin(2*Math.PI*f*t)+0.3*Math.sin(2*Math.PI*f*1.5*t));} return o; }
+    function genSleep3() { const sr=44100,d=1.0,n=Math.floor(sr*d),o=new Float32Array(n); for(let i=0;i<n;i++){const t=i/sr,e=Math.max(0,1-t/d),f=150+50*Math.sin(t*3);o[i]=e*0.2*Math.sign(Math.sin(2*Math.PI*f*t));} return o; }
+
+    function genWake1() { const sr=44100,d=0.6,n=Math.floor(sr*d),o=new Float32Array(n); for(let i=0;i<n;i++){const t=i/sr,e=Math.min(1,t/0.05)*Math.max(0,1-t/d),f=400+800*(t/d);o[i]=e*0.35*Math.sin(2*Math.PI*f*t);} return o; }
+    function genWake2() { const sr=44100,d=0.4,n=Math.floor(sr*d),o=new Float32Array(n); for(let i=0;i<n;i++){const t=i/sr,e=Math.min(1,t/0.01)*Math.max(0,1-t/d);o[i]=e*0.4*Math.sin(2*Math.PI*880*t)*Math.exp(-t*5);} return o; }
+    function genWake3() { const sr=44100,d=0.8,n=Math.floor(sr*d),o=new Float32Array(n); for(let i=0;i<n;i++){const t=i/sr,e=Math.min(1,t/0.1)*Math.max(0,1-t/d),f=300+500*(t/d)+100*Math.sin(t*8);o[i]=e*0.3*Math.sin(2*Math.PI*f*t);} return o; }
+
+    function genHappy1() { const sr=44100,d=0.8,n=Math.floor(sr*d),o=new Float32Array(n); for(let i=0;i<n;i++){const t=i/sr;const note=t<0.2?0:1;const f=note===0?523:659;const lt=note===0?t:t-0.3;const e=Math.max(0,1-Math.abs(lt-0.15)/0.2);o[i]=e*0.35*Math.sin(2*Math.PI*f*lt);} return o; }
+    function genHappy2() { const sr=44100,d=0.6,n=Math.floor(sr*d),o=new Float32Array(n); for(let i=0;i<n;i++){const t=i/sr,e=Math.min(1,t/0.02)*Math.max(0,1-t/d);o[i]=e*0.3*(Math.sin(2*Math.PI*523*t)+0.5*Math.sin(2*Math.PI*659*t)+0.3*Math.sin(2*Math.PI*784*t));} return o; }
+    function genHappy3() { const sr=44100,d=0.7,n=Math.floor(sr*d),o=new Float32Array(n); for(let i=0;i<n;i++){const t=i/sr,e=Math.max(0,1-t/d),f=600+400*Math.sin(t*12);o[i]=e*0.3*Math.sin(2*Math.PI*f*t);} return o; }
+
+    function genDizzy1() { const sr=44100,d=0.7,n=Math.floor(sr*d),o=new Float32Array(n); for(let i=0;i<n;i++){const t=i/sr,e=Math.max(0,1-t/d),lfo=Math.sin(2*Math.PI*6*t),f=300+100*lfo;o[i]=e*0.3*Math.sin(2*Math.PI*f*t);} return o; }
+    function genDizzy2() { const sr=44100,d=0.8,n=Math.floor(sr*d),o=new Float32Array(n); for(let i=0;i<n;i++){const t=i/sr,e=Math.max(0,1-t/d),f=200+300*Math.sin(t*5);o[i]=e*0.25*Math.sin(2*Math.PI*f*t)*(1+0.5*Math.sin(t*15));} return o; }
+    function genDizzy3() { const sr=44100,d=0.6,n=Math.floor(sr*d),o=new Float32Array(n); for(let i=0;i<n;i++){const t=i/sr,e=Math.max(0,1-t/d),f=400+200*Math.sin(t*8);o[i]=e*0.3*(Math.sin(2*Math.PI*f*t)>0?1:-1)*0.3;} return o; }
+
+    function genMad1() { const sr=44100,d=0.5,n=Math.floor(sr*d),o=new Float32Array(n); for(let i=0;i<n;i++){const t=i/sr,e=Math.max(0,1-t/d),f=200-80*(t/d);o[i]=e*(Math.sin(2*Math.PI*f*t)>0?0.3:-0.3);} return o; }
+    function genMad2() { const sr=44100,d=0.3,n=Math.floor(sr*d),o=new Float32Array(n); for(let i=0;i<n;i++){const t=i/sr,e=Math.max(0,1-t/d);o[i]=e*0.4*Math.sin(2*Math.PI*150*t)*Math.exp(-t*8);} return o; }
+    function genMad3() { const sr=44100,d=0.6,n=Math.floor(sr*d),o=new Float32Array(n); for(let i=0;i<n;i++){const t=i/sr,e=Math.max(0,1-t/d),f=100+50*Math.sin(t*3);o[i]=e*0.25*(Math.sin(2*Math.PI*f*t)+0.4*Math.sin(2*Math.PI*f*2*t));} return o; }
+
+    // ── Playback ────────────────────────────────────────────────
+    function playBuffer(buffer) {
+      const ctx = getCtx();
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(ctx.destination);
+      src.start();
+      return src;
+    }
+
+    async function playSample(soundId, idx) {
+      const sound = SOUNDS.find(s => s.id === soundId);
+      const sample = sound.samples[idx];
+      let buffer;
+      try {
+        const resp = await fetch(sample.src);
+        if (resp.ok) {
+          const data = await resp.arrayBuffer();
+          buffer = await getCtx().decodeAudioData(data);
+        }
+      } catch {}
+      if (!buffer) {
+        const sr = 44100;
+        const pcm = sample.gen();
+        buffer = getCtx().createBuffer(1, pcm.length, sr);
+        buffer.getChannelData(0).set(pcm);
+      }
+      playBuffer(buffer);
+
+      // Visual feedback
+      const btn = document.querySelector(`[data-sound="${soundId}"][data-idx="${idx}"]`);
+      if (btn) {
+        btn.classList.add('playing');
+        setTimeout(() => btn.classList.remove('playing'), (buffer.duration * 1000) + 100);
+      }
+    }
+
+    function choosePick(soundId, idx) {
+      picks[soundId] = idx;
+      localStorage.setItem('jelli-sfx-picks', JSON.stringify(picks));
+      render();
+    }
+
+    // ── Render ──────────────────────────────────────────────────
+    function render() {
+      const app = document.getElementById('app');
+      app.innerHTML = SOUNDS.map(sound => `
+        <div class="card">
+          <div class="card-header">
+            <h2>${sound.icon} ${sound.label}</h2>
+            <span class="badge ${picks[sound.id] !== undefined ? 'active' : ''}">${picks[sound.id] !== undefined ? 'Picked' : 'Not picked'}</span>
+          </div>
+          <div class="samples">
+            ${sound.samples.map((s, i) => `
+              <div class="sample-row">
+                <button data-sound="${sound.id}" data-idx="${i}" onclick="playSample('${sound.id}', ${i})" title="Play">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+                </button>
+                <span class="sample-name">${s.name}</span>
+                <button class="pick-btn ${picks[sound.id] === i ? 'chosen' : ''}" onclick="choosePick('${sound.id}', ${i})">Pick</button>
+              </div>
+            `).join('')}
+            <div class="custom-upload">
+              <label>
+                + Upload .wav
+                <input type="file" accept=".wav,audio/*" onchange="handleUpload('${sound.id}', event)" />
+              </label>
+            </div>
+          </div>
+        </div>
+      `).join('');
+
+      updatePicksOutput();
+    }
+
+    function handleUpload(soundId, event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const data = e.target.result;
+        try {
+          const buffer = await getCtx().decodeAudioData(data);
+          playBuffer(buffer);
+
+          // Add to samples list
+          const sound = SOUNDS.find(s => s.id === soundId);
+          const idx = sound.samples.length;
+          sound.samples.push({ name: file.name, src: null, gen: null, customBuffer: buffer });
+          choosePick(soundId, idx);
+        } catch (err) {
+          console.error('Failed to decode audio:', err);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function updatePicksOutput() {
+      const el = document.getElementById('picks-output');
+      const lines = Object.entries(picks).map(([id, idx]) => {
+        const sound = SOUNDS.find(s => s.id === id);
+        const sample = sound.samples[idx];
+        return `${id}.wav ← ${sample.name}`;
+      });
+      el.textContent = lines.length ? lines.join('\n') : 'No picks yet';
+    }
+
+    // Override playSample to support custom uploaded buffers
+    const _origPlay = playSample;
+    window.playSample = function(soundId, idx) {
+      const sound = SOUNDS.find(s => s.id === soundId);
+      const sample = sound.samples[idx];
+      if (sample.customBuffer) {
+        playBuffer(sample.customBuffer);
+        const btn = document.querySelector(`[data-sound="${soundId}"][data-idx="${idx}"]`);
+        if (btn) {
+          btn.classList.add('playing');
+          setTimeout(() => btn.classList.remove('playing'), (sample.customBuffer.duration * 1000) + 100);
+        }
+        return;
+      }
+      _origPlay(soundId, idx);
+    };
+
+    render();
+  </script>
+</body>
+</html>

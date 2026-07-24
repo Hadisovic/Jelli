@@ -2,6 +2,8 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, emit, type UnlistenFn } from '@tauri-apps/api/event'
 import { getSystemPrompt, FEW_SHOT_MESSAGES } from './system-prompt'
 import type { BlobExpression } from '@/stores/config'
+import { formatMemoryContext } from './memory'
+import { useMemoryStore } from '@/stores/memory'
 
 export interface ChatMessage {
   role: string
@@ -19,6 +21,7 @@ export interface ProviderConfig {
   quantization?: string
   repeat_penalty?: number
   frequency_penalty?: number
+  memory_context?: string
 }
 
 export interface LlmTokenPayload {
@@ -67,9 +70,14 @@ export async function sendChatMessage(
 ): Promise<void> {
   const systemMsg: ChatMessage = { role: 'system', content: getSystemPrompt(expression) }
   const augmented = [systemMsg, ...FEW_SHOT_MESSAGES, ...messages]
+  const isGateway = config.provider === 'gateway'
+  // Read memory directly from the store — immune to system-prompt text changes
+  const memoryContext = isGateway
+    ? (formatMemoryContext(useMemoryStore.getState().getMemoryState()) || undefined)
+    : undefined
   await invoke('send_chat_message', {
     requestId,
-    messages: augmented,
+    messages: isGateway ? messages : augmented,
     config: {
       provider: config.provider,
       model: config.model,
@@ -81,6 +89,7 @@ export async function sendChatMessage(
       quantization: config.quantization ?? null,
       repeat_penalty: config.repeat_penalty ?? null,
       frequency_penalty: config.frequency_penalty ?? null,
+      memory_context: memoryContext ?? null,
     },
   })
 }
@@ -165,6 +174,14 @@ export async function saveSettings(settings: Record<string, unknown>): Promise<v
 
 export async function loadSettings(): Promise<Record<string, unknown>> {
   return await invoke<Record<string, unknown>>('load_settings')
+}
+
+export async function saveProviderApiKey(provider: string, apiKey: string): Promise<void> {
+  await invoke('set_provider_api_key', { provider, apiKey })
+}
+
+export async function loadProviderApiKey(provider: string): Promise<string | null> {
+  return await invoke<string | null>('get_provider_api_key', { provider })
 }
 
 export interface LlmClearPayload {
