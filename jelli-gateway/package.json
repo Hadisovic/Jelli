@@ -2,6 +2,7 @@
   "name": "jelli-gateway",
   "version": "1.0.0",
   "description": "Zero-Config 3-Tier Cascading LLM Failover Gateway Cloudflare Worker Proxy",
+  "type": "module",
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",

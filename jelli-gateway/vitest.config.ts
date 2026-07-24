@@ -1,11 +1,11 @@
-import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config'
+import { defineConfig } from 'vitest/config'
+import { cloudflarePool } from '@cloudflare/vitest-pool-workers'
 
-export default defineWorkersConfig({
+export default defineConfig({
   test: {
-    poolOptions: {
-      workers: {
-        wrangler: { configPath: './wrangler.toml' },
-      },
-    },
+    pool: cloudflarePool({
+      main: './src/index.ts',
+      wrangler: { configPath: './wrangler.toml' },
+    }),
   },
 })

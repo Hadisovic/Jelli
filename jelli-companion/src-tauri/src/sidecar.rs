@@ -1,10 +1,10 @@
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
-use tokio::sync::Mutex as TokioMutex;
-use base64::Engine;
 use tauri::Emitter;
+use tokio::sync::Mutex as TokioMutex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SidecarMessage {
@@ -50,7 +50,12 @@ impl SidecarProcess {
         }
     }
 
-    pub async fn spawn(&self, path: &str, args: &[String], window: tauri::Window) -> Result<(), String> {
+    pub async fn spawn(
+        &self,
+        path: &str,
+        args: &[String],
+        window: tauri::Window,
+    ) -> Result<(), String> {
         let mut child = Command::new(path)
             .args(args)
             .stdin(Stdio::piped())
@@ -71,36 +76,50 @@ impl SidecarProcess {
             for line in reader.lines() {
                 match line {
                     Ok(line) => {
-                        if line.trim().is_empty() { continue; }
+                        if line.trim().is_empty() {
+                            continue;
+                        }
                         if let Ok(msg) = serde_json::from_str::<SidecarMessage>(&line) {
                             match msg.msg_type.as_str() {
                                 "pong" => { /* heartbeat response — ignore */ }
                                 "ready" => {
-                                    let _ = win.emit("sidecar:status", SidecarStatusPayload {
-                                        status: "ready".into(),
-                                        message: None,
-                                    });
+                                    let _ = win.emit(
+                                        "sidecar:status",
+                                        SidecarStatusPayload {
+                                            status: "ready".into(),
+                                            message: None,
+                                        },
+                                    );
                                 }
                                 "audio" | "audio_done" | "error" => {
                                     let rid = msg.request_id.clone().unwrap_or_default();
                                     if let (Some(pcm), Some(sr)) = (msg.pcm_data, msg.sample_rate) {
                                         let base64 = base64_encode_f32(&pcm);
-                                        let _ = win.emit("audio:chunk", AudioChunkPayload {
-                                            request_id: rid.clone(),
-                                            pcm_base64: base64,
-                                            sample_rate: sr,
-                                        });
+                                        let _ = win.emit(
+                                            "audio:chunk",
+                                            AudioChunkPayload {
+                                                request_id: rid.clone(),
+                                                pcm_base64: base64,
+                                                sample_rate: sr,
+                                            },
+                                        );
                                     }
                                     if msg.msg_type == "audio_done" {
-                                        let _ = win.emit("audio:done", AudioDonePayload {
-                                            request_id: rid.clone(),
-                                        });
+                                        let _ = win.emit(
+                                            "audio:done",
+                                            AudioDonePayload {
+                                                request_id: rid.clone(),
+                                            },
+                                        );
                                     }
                                     if msg.msg_type == "error" {
-                                        let _ = win.emit("audio:error", serde_json::json!({
-                                            "request_id": rid,
-                                            "message": msg.message.unwrap_or_default(),
-                                        }));
+                                        let _ = win.emit(
+                                            "audio:error",
+                                            serde_json::json!({
+                                                "request_id": rid,
+                                                "message": msg.message.unwrap_or_default(),
+                                            }),
+                                        );
                                     }
                                 }
                                 other => {
@@ -110,18 +129,24 @@ impl SidecarProcess {
                         }
                     }
                     Err(e) => {
-                        let _ = win.emit("sidecar:status", SidecarStatusPayload {
-                            status: "error".into(),
-                            message: Some(format!("sidecar read: {e}")),
-                        });
+                        let _ = win.emit(
+                            "sidecar:status",
+                            SidecarStatusPayload {
+                                status: "error".into(),
+                                message: Some(format!("sidecar read: {e}")),
+                            },
+                        );
                         break;
                     }
                 }
             }
-            let _ = win.emit("sidecar:status", SidecarStatusPayload {
-                status: "stopped".into(),
-                message: None,
-            });
+            let _ = win.emit(
+                "sidecar:status",
+                SidecarStatusPayload {
+                    status: "stopped".into(),
+                    message: None,
+                },
+            );
         });
 
         let win2 = window.clone();
@@ -135,10 +160,13 @@ impl SidecarProcess {
                     let mut guard = child_arc.lock().await;
                     if let Some(ref mut c) = *guard {
                         if let Ok(Some(_)) = c.try_wait() {
-                            let _ = win2.emit("sidecar:status", SidecarStatusPayload {
-                                status: "stopped".into(),
-                                message: Some("process exited".into()),
-                            });
+                            let _ = win2.emit(
+                                "sidecar:status",
+                                SidecarStatusPayload {
+                                    status: "stopped".into(),
+                                    message: Some("process exited".into()),
+                                },
+                            );
                             break;
                         }
                     } else {
@@ -154,15 +182,24 @@ impl SidecarProcess {
             }
         });
 
-        let _ = window.emit("sidecar:status", SidecarStatusPayload {
-            status: "running".into(),
-            message: None,
-        });
+        let _ = window.emit(
+            "sidecar:status",
+            SidecarStatusPayload {
+                status: "running".into(),
+                message: None,
+            },
+        );
 
         Ok(())
     }
 
-    pub async fn send_tts(&self, request_id: &str, text: &str, speaker_id: u32, quantization: &str) -> Result<(), String> {
+    pub async fn send_tts(
+        &self,
+        request_id: &str,
+        text: &str,
+        speaker_id: u32,
+        quantization: &str,
+    ) -> Result<(), String> {
         let msg = serde_json::json!({
             "type": "tts",
             "text": text,

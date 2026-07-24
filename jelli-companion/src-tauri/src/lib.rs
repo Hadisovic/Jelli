@@ -47,34 +47,37 @@ async fn send_chat_message(
     messages: Vec<ChatMessage>,
     config: ProviderConfig,
 ) -> Result<(), String> {
-    state.cancel_map.lock().unwrap().insert(request_id.clone(), false);
+    state
+        .cancel_map
+        .lock()
+        .unwrap()
+        .insert(request_id.clone(), false);
 
     let rid = request_id.clone();
     let cancel_map = state.cancel_map.clone();
     let sid = state.sidecar.clone();
 
     tokio::spawn(async move {
-        let result = llm::stream_llm(
-            &window,
-            &rid,
-            &messages,
-            &config,
-            &cancel_map,
-        ).await;
+        let result = llm::stream_llm(&window, &rid, &messages, &config, &cancel_map).await;
 
         match result {
             Ok(full_text) => {
                 if !full_text.is_empty() {
                     let speaker_id = config.speaker_id.unwrap_or(0);
                     let quantization = config.quantization.clone().unwrap_or("fp16".into());
-                    let _ = sid.send_tts(&rid, &full_text, speaker_id, &quantization).await;
+                    let _ = sid
+                        .send_tts(&rid, &full_text, speaker_id, &quantization)
+                        .await;
                 }
             }
             Err(e) => {
-                let _ = window.emit("llm:error", llm::LlmErrorPayload {
-                    request_id: rid.clone(),
-                    message: e,
-                });
+                let _ = window.emit(
+                    "llm:error",
+                    llm::LlmErrorPayload {
+                        request_id: rid.clone(),
+                        message: e,
+                    },
+                );
             }
         }
 
@@ -85,10 +88,7 @@ async fn send_chat_message(
 }
 
 #[tauri::command]
-async fn stop_generation(
-    state: tauri::State<'_, AppState>,
-    request_id: String,
-) -> Result<(), ()> {
+async fn stop_generation(state: tauri::State<'_, AppState>, request_id: String) -> Result<(), ()> {
     state.cancel_map.lock().unwrap().insert(request_id, true);
     Ok(())
 }
@@ -101,7 +101,10 @@ async fn send_tts(
     speaker_id: u32,
     quantization: String,
 ) -> Result<(), String> {
-    state.sidecar.send_tts(&request_id, &text, speaker_id, &quantization).await
+    state
+        .sidecar
+        .send_tts(&request_id, &text, speaker_id, &quantization)
+        .await
 }
 
 // ── Window commands ──────────────────────────────────────────────────────────
@@ -164,7 +167,9 @@ fn get_screen_info(window: tauri::Window) -> Result<((f64, f64), (f64, f64)), St
 
 #[tauri::command]
 fn show_chat_window(app: tauri::AppHandle, x: f64, y: f64) -> Result<(), String> {
-    let chat = app.get_webview_window("chat").ok_or("chat window not found")?;
+    let chat = app
+        .get_webview_window("chat")
+        .ok_or("chat window not found")?;
     chat.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }))
         .map_err(|e| format!("set_position failed: {}", e))?;
     chat.show().map_err(|e| format!("show failed: {}", e))?;
@@ -173,14 +178,18 @@ fn show_chat_window(app: tauri::AppHandle, x: f64, y: f64) -> Result<(), String>
 
 #[tauri::command]
 fn hide_chat_window(app: tauri::AppHandle) -> Result<(), String> {
-    let chat = app.get_webview_window("chat").ok_or("chat window not found")?;
+    let chat = app
+        .get_webview_window("chat")
+        .ok_or("chat window not found")?;
     chat.hide().map_err(|e| format!("hide failed: {}", e))?;
     Ok(())
 }
 
 #[tauri::command]
 fn set_chat_window_position(app: tauri::AppHandle, x: f64, y: f64) -> Result<(), String> {
-    let chat = app.get_webview_window("chat").ok_or("chat window not found")?;
+    let chat = app
+        .get_webview_window("chat")
+        .ok_or("chat window not found")?;
     chat.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }))
         .map_err(|e| format!("set_position failed: {}", e))?;
     Ok(())
@@ -194,8 +203,8 @@ fn get_window_label(window: tauri::Window) -> String {
 #[tauri::command]
 fn get_cursor_position(window: tauri::Window) -> Result<(f64, f64), String> {
     unsafe {
-        use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
         use windows_sys::Win32::Foundation::POINT;
+        use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
         let mut pt = POINT { x: 0, y: 0 };
         if GetCursorPos(&mut pt) != 0 {
             let scale = window.scale_factor().unwrap_or(1.0);
@@ -217,11 +226,20 @@ fn save_settings(app: tauri::AppHandle, settings: serde_json::Value) -> Result<(
     std::fs::create_dir_all(&dir).map_err(|e| format!("create_dir_all: {e}"))?;
     let path = dir.join(SETTINGS_FILE);
     let mut settings = settings;
-    if let Some(key) = settings.get("apiKey").and_then(serde_json::Value::as_str).filter(|key| !key.is_empty()) {
-        let provider = settings.get("llmProvider").and_then(serde_json::Value::as_str).unwrap_or("openai");
+    if let Some(key) = settings
+        .get("apiKey")
+        .and_then(serde_json::Value::as_str)
+        .filter(|key| !key.is_empty())
+    {
+        let provider = settings
+            .get("llmProvider")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("openai");
         set_provider_api_key(provider.to_string(), key.to_string())?;
     }
-    if let Some(object) = settings.as_object_mut() { object.remove("apiKey"); }
+    if let Some(object) = settings.as_object_mut() {
+        object.remove("apiKey");
+    }
     let json =
         serde_json::to_string_pretty(&settings).map_err(|e| format!("serialize settings: {e}"))?;
     std::fs::write(&path, json).map_err(|e| format!("write settings: {e}"))?;
@@ -241,11 +259,21 @@ fn load_settings(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let data = std::fs::read_to_string(&path).map_err(|e| format!("read settings: {e}"))?;
     let mut val: serde_json::Value =
         serde_json::from_str(&data).map_err(|e| format!("parse settings: {e}"))?;
-    if let Some(key) = val.get("apiKey").and_then(serde_json::Value::as_str).filter(|key| !key.is_empty()) {
-        let provider = val.get("llmProvider").and_then(serde_json::Value::as_str).unwrap_or("openai");
+    if let Some(key) = val
+        .get("apiKey")
+        .and_then(serde_json::Value::as_str)
+        .filter(|key| !key.is_empty())
+    {
+        let provider = val
+            .get("llmProvider")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("openai");
         set_provider_api_key(provider.to_string(), key.to_string())?;
-        if let Some(object) = val.as_object_mut() { object.remove("apiKey"); }
-        let json = serde_json::to_string_pretty(&val).map_err(|e| format!("serialize settings: {e}"))?;
+        if let Some(object) = val.as_object_mut() {
+            object.remove("apiKey");
+        }
+        let json =
+            serde_json::to_string_pretty(&val).map_err(|e| format!("serialize settings: {e}"))?;
         std::fs::write(&path, json).map_err(|e| format!("migrate settings: {e}"))?;
     }
     Ok(val)
@@ -257,8 +285,12 @@ fn keyring_entry(provider: &str) -> Result<keyring::v1::Entry, String> {
 
 #[tauri::command]
 fn set_provider_api_key(provider: String, api_key: String) -> Result<(), String> {
-    if api_key.is_empty() { return Ok(()); }
-    keyring_entry(&provider)?.set_password(&api_key).map_err(|e| format!("save credential: {e}"))
+    if api_key.is_empty() {
+        return Ok(());
+    }
+    keyring_entry(&provider)?
+        .set_password(&api_key)
+        .map_err(|e| format!("save credential: {e}"))
 }
 
 #[tauri::command]
@@ -382,12 +414,10 @@ pub fn run() {
                         width: w,
                         height: h,
                     }));
-                    let _ = window.set_position(tauri::Position::Logical(
-                        tauri::LogicalPosition {
-                            x: lw - w - 20.0,
-                            y: lh - h - 40.0,
-                        },
-                    ));
+                    let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition {
+                        x: lw - w - 20.0,
+                        y: lh - h - 40.0,
+                    }));
                 }
             }
 

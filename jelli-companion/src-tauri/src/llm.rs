@@ -49,7 +49,9 @@ pub struct LlmClearPayload {
 }
 
 fn is_cancelled(request_id: &str, map: &CancelMap) -> bool {
-    map.try_lock().map(|g| g.get(request_id).copied().unwrap_or(false)).unwrap_or(false)
+    map.try_lock()
+        .map(|g| g.get(request_id).copied().unwrap_or(false))
+        .unwrap_or(false)
 }
 
 pub async fn stream_llm<R: tauri::Runtime>(
@@ -97,10 +99,7 @@ async fn stream_gateway<R: tauri::Runtime>(
     });
 
     let client = build_client();
-    let resp_result = client.post(&gateway_url)
-        .json(&body)
-        .send()
-        .await;
+    let resp_result = client.post(&gateway_url).json(&body).send().await;
 
     let resp = match resp_result {
         Ok(r) => r,
@@ -138,11 +137,16 @@ async fn stream_gateway<R: tauri::Runtime>(
                         break;
                     }
                     if line == "data: [CLEAR]" {
-                        println!("[gateway] Received mid-stream failover clear signal from cloud proxy.");
+                        println!(
+                            "[gateway] Received mid-stream failover clear signal from cloud proxy."
+                        );
                         full.clear();
-                        let _ = window.emit("llm:clear", LlmClearPayload {
-                            request_id: request_id.to_string(),
-                        });
+                        let _ = window.emit(
+                            "llm:clear",
+                            LlmClearPayload {
+                                request_id: request_id.to_string(),
+                            },
+                        );
                         continue;
                     }
                     if let Some(data) = line.strip_prefix("data: ") {
@@ -178,24 +182,33 @@ async fn stream_gateway<R: tauri::Runtime>(
 }
 
 async fn emit_token<R: tauri::Runtime>(window: &tauri::Window<R>, request_id: &str, token: &str) {
-    let _ = window.emit("llm:token", TokenPayload {
-        request_id: request_id.to_string(),
-        token: token.to_string(),
-    });
+    let _ = window.emit(
+        "llm:token",
+        TokenPayload {
+            request_id: request_id.to_string(),
+            token: token.to_string(),
+        },
+    );
 }
 
 async fn emit_done<R: tauri::Runtime>(window: &tauri::Window<R>, request_id: &str) {
-    let _ = window.emit("llm:done", LlmDonePayload {
-        request_id: request_id.to_string(),
-    });
+    let _ = window.emit(
+        "llm:done",
+        LlmDonePayload {
+            request_id: request_id.to_string(),
+        },
+    );
 }
 
 #[allow(dead_code)]
 async fn emit_error<R: tauri::Runtime>(window: &tauri::Window<R>, request_id: &str, message: &str) {
-    let _ = window.emit("llm:error", LlmErrorPayload {
-        request_id: request_id.to_string(),
-        message: message.to_string(),
-    });
+    let _ = window.emit(
+        "llm:error",
+        LlmErrorPayload {
+            request_id: request_id.to_string(),
+            message: message.to_string(),
+        },
+    );
 }
 
 fn default_url(provider: &str) -> &str {
@@ -241,17 +254,17 @@ async fn stream_ollama<R: tauri::Runtime>(
                 // Turn 1: inject full system prompt
                 last_user.content = format!(
                     "SYSTEM INSTRUCTIONS (ACT LIKE THIS): {}\n\nUSER MESSAGE: {}",
-                    sys_content,
-                    last_user.content
+                    sys_content, last_user.content
                 );
             } else {
                 // Turn 2+: include memory context in reminder
                 // Extract memory context from system prompt if present
-                let memory_context = if let Some(memory_start) = sys_content.find("Known user context:") {
-                    &sys_content[memory_start..]
-                } else {
-                    ""
-                };
+                let memory_context =
+                    if let Some(memory_start) = sys_content.find("Known user context:") {
+                        &sys_content[memory_start..]
+                    } else {
+                        ""
+                    };
 
                 let short_reminder = if memory_context.is_empty() {
                     "stay in character as jelli — lowercase, 1 sentence, emojis, gen z texting, no periods, be casual and brief".to_string()
@@ -262,11 +275,8 @@ async fn stream_ollama<R: tauri::Runtime>(
                     )
                 };
 
-                last_user.content = format!(
-                    "{}\n\nUSER MESSAGE: {}",
-                    short_reminder,
-                    last_user.content
-                );
+                last_user.content =
+                    format!("{}\n\nUSER MESSAGE: {}", short_reminder, last_user.content);
             }
         }
     }
@@ -283,7 +293,8 @@ async fn stream_ollama<R: tauri::Runtime>(
         }
     });
     let client = build_client();
-    let resp = client.post(format!("{base}/api/chat"))
+    let resp = client
+        .post(format!("{base}/api/chat"))
         .json(&body)
         .send()
         .await
@@ -292,7 +303,9 @@ async fn stream_ollama<R: tauri::Runtime>(
     use futures_util::StreamExt;
     let mut stream = resp.bytes_stream();
     while let Some(chunk) = stream.next().await {
-        if is_cancelled(request_id, cancel) { break; }
+        if is_cancelled(request_id, cancel) {
+            break;
+        }
         let chunk = chunk.map_err(|e| format!("ollama stream: {e}"))?;
         for line in chunk.split(|&b| b == b'\n').filter(|l| !l.is_empty()) {
             if let Ok(val) = serde_json::from_slice::<serde_json::Value>(line) {
@@ -331,15 +344,19 @@ async fn stream_openai<R: tauri::Runtime>(
         "max_tokens": config.max_tokens.unwrap_or(2048),
     });
     let client = build_client();
-    let resp = client.post(format!("{base}/v1/chat/completions"))
+    let resp = client
+        .post(format!("{base}/v1/chat/completions"))
         .header("Authorization", format!("Bearer {key}"))
         .json(&body)
         .send()
         .await
         .map_err(|e| format!("openai request: {e}"))?;
     parse_sse_stream(window, request_id, resp, cancel, |json| {
-        json["choices"][0]["delta"]["content"].as_str().map(|s| s.to_string())
-    }).await
+        json["choices"][0]["delta"]["content"]
+            .as_str()
+            .map(|s| s.to_string())
+    })
+    .await
 }
 
 // ── DeepSeek (OpenAI-compatible) ────────────────────────────────────────────
@@ -363,9 +380,15 @@ async fn stream_anthropic<R: tauri::Runtime>(
     config: &ProviderConfig,
     cancel: &CancelMap,
 ) -> Result<String, String> {
-    let base = config.api_url.as_deref().unwrap_or(default_url("anthropic"));
+    let base = config
+        .api_url
+        .as_deref()
+        .unwrap_or(default_url("anthropic"));
     let key = config.api_key.as_deref().ok_or("anthropic: no api key")?;
-    let system = messages.iter().find(|m| m.role == "system").map(|m| m.content.as_str());
+    let system = messages
+        .iter()
+        .find(|m| m.role == "system")
+        .map(|m| m.content.as_str());
     let chat_messages: Vec<&ChatMessage> = messages.iter().filter(|m| m.role != "system").collect();
     let mut body = serde_json::json!({
         "model": config.model,
@@ -373,10 +396,15 @@ async fn stream_anthropic<R: tauri::Runtime>(
         "max_tokens": config.max_tokens.unwrap_or(2048),
         "stream": true,
     });
-    if let Some(s) = system { body["system"] = serde_json::json!(s); }
-    if let Some(t) = config.temperature { body["temperature"] = serde_json::json!(t); }
+    if let Some(s) = system {
+        body["system"] = serde_json::json!(s);
+    }
+    if let Some(t) = config.temperature {
+        body["temperature"] = serde_json::json!(t);
+    }
     let client = build_client();
-    let resp = client.post(format!("{base}/v1/messages"))
+    let resp = client
+        .post(format!("{base}/v1/messages"))
         .header("x-api-key", key)
         .header("anthropic-version", "2023-06-01")
         .json(&body)
@@ -389,7 +417,8 @@ async fn stream_anthropic<R: tauri::Runtime>(
         } else {
             None
         }
-    }).await
+    })
+    .await
 }
 
 // ── Gemini ─────────────────────────────────────────────────────────────────
@@ -404,15 +433,21 @@ async fn stream_gemini<R: tauri::Runtime>(
     let base = config.api_url.as_deref().unwrap_or(default_url("gemini"));
     let key = config.api_key.as_deref().ok_or("gemini: no api key")?;
 
-    let system = messages.iter().find(|m| m.role == "system").map(|m| m.content.as_str());
+    let system = messages
+        .iter()
+        .find(|m| m.role == "system")
+        .map(|m| m.content.as_str());
     let chat_messages: Vec<&ChatMessage> = messages.iter().filter(|m| m.role != "system").collect();
 
-    let gemini_contents: Vec<serde_json::Value> = chat_messages.iter().map(|m| {
-        serde_json::json!({
-            "role": if m.role == "assistant" { "model" } else { "user" },
-            "parts": [{"text": m.content}]
+    let gemini_contents: Vec<serde_json::Value> = chat_messages
+        .iter()
+        .map(|m| {
+            serde_json::json!({
+                "role": if m.role == "assistant" { "model" } else { "user" },
+                "parts": [{"text": m.content}]
+            })
         })
-    }).collect();
+        .collect();
 
     let mut body = serde_json::json!({
         "contents": gemini_contents,
@@ -428,16 +463,23 @@ async fn stream_gemini<R: tauri::Runtime>(
         });
     }
 
-    let url = format!("{base}/v1beta/models/{}:streamGenerateContent?key={key}", config.model);
+    let url = format!(
+        "{base}/v1beta/models/{}:streamGenerateContent?key={key}",
+        config.model
+    );
     let client = build_client();
-    let resp = client.post(&url)
+    let resp = client
+        .post(&url)
         .json(&body)
         .send()
         .await
         .map_err(|e| format!("gemini request: {e}"))?;
     parse_sse_stream(window, request_id, resp, cancel, |json| {
-        json["candidates"][0]["content"]["parts"][0]["text"].as_str().map(|s| s.to_string())
-    }).await
+        json["candidates"][0]["content"]["parts"][0]["text"]
+            .as_str()
+            .map(|s| s.to_string())
+    })
+    .await
 }
 
 // ── SSE parser (shared by OpenAI, Anthropic, Gemini, DeepSeek) ──────────────
@@ -463,14 +505,20 @@ where
     let mut stream = resp.bytes_stream();
     let mut buf = String::new();
     while let Some(chunk) = stream.next().await {
-        if is_cancelled(request_id, cancel) { break; }
+        if is_cancelled(request_id, cancel) {
+            break;
+        }
         let chunk = chunk.map_err(|e| format!("sse stream: {e}"))?;
         buf.push_str(&String::from_utf8_lossy(&chunk));
         while let Some(line_end) = buf.find('\n') {
             let line = buf[..line_end].trim().to_string();
             buf = buf[line_end + 1..].to_string();
-            if line.is_empty() || line.starts_with(':') { continue; }
-            if line == "data: [DONE]" { break; }
+            if line.is_empty() || line.starts_with(':') {
+                continue;
+            }
+            if line == "data: [DONE]" {
+                break;
+            }
             if let Some(data) = line.strip_prefix("data: ") {
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
                     if let Some(text) = extract(&json) {
